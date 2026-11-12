@@ -1,0 +1,48 @@
+{
+	"version": 1,
+	"path": "/stream",
+	"audio": { "codec": "opus", "sampleRate": 48000, "channels": 2, "frameMs": 20 },
+	"limits": {
+		"maxAudioFrameBytes": 1500,
+		"maxTextBytes": 2048,
+		"token": 64,
+		"code": 12,
+		"device": 40,
+		"title": 200,
+		"artist": 200,
+		"url": 300
+	},
+	"client": {
+		"hello": { "v": "number", "token": "string" },
+		"pair": { "v": "number", "code": "string", "device": "string" },
+		"live": {},
+		"stop": {},
+		"now": { "title": "string", "artist": "string", "playing": "boolean" },
+		"jam": { "url": "string" }
+	},
+	"server": {
+		"welcome": { "v": "number" },
+		"paired": { "token": "string" },
+		"error": { "code": "string", "message": "string" },
+		"live": {},
+		"ended": { "reason": "string" },
+		"pause": { "reason": "string" },
+		"resume": {},
+		"skip": {},
+		"request": { "by": "string", "song": "string" },
+		"notify": { "text": "string" }
+	},
+	"errors": {
+		"update": "The app is older than the bot. It has to be updated before it can connect.",
+		"bad-message": "A message wasn't one of the ones above, or a field was missing, the wrong kind or too long.",
+		"bad-code": "The pairing code is wrong, already used, or older than 10 minutes. Get a new one from /me.",
+		"bad-token": "The bot no longer knows this app. It was unpaired, so pair it again.",
+		"too-many-devices": "This person already has the most paired computers allowed. Unpair one in /me first.",
+		"too-many-tries": "Too many wrong codes or keys from this address. Wait a while.",
+		"busy": "The bot has as many connections as it takes right now. Try again shortly.",
+		"too-fast": "The app sent messages or audio faster than the bot accepts.",
+		"timeout": "The app didn't say who it was in time.",
+		"replaced": "The same computer connected again, so this older connection was closed.",
+		"unavailable": "Streaming can't start right now. The message says why."
+	}
+}

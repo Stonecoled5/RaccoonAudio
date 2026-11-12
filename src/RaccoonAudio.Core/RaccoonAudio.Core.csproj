@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Concentus" Version="2.2.2" />
+  </ItemGroup>
+
+  <!-- The protocol is the bot's own file, copied into this repository. It's built into the app so there is exactly
+       one place the app reads it from. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\protocol\stream-protocol.json" LogicalName="stream-protocol.json" />
+  </ItemGroup>
+
+</Project>
