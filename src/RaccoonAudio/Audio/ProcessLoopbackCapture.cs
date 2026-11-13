@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using RaccoonAudio.Core;
 
 namespace RaccoonAudio.Audio;
 
@@ -7,8 +8,15 @@ namespace RaccoonAudio.Audio;
 // from then on it hands over exactly what that program plays. Notifications, calls, games, other browser tabs in
 // another program: none of that is in it.
 //
-// It asks for 48 kHz, 16-bit stereo, which is what gets encoded, and Windows converts whatever the program is
-// actually playing to that. When the program is silent Windows hands over nothing at all, so nothing is sent.
+// It asks for 48 kHz stereo, and Windows converts whatever the program is actually playing to that. When the program
+// is silent Windows hands over nothing at all, so nothing is sent.
+//
+// What it captures is the program after its own volume in Windows' volume mixer: turn the program down there and
+// this gets quieter too, mute it and this is silence. So that the person streaming doesn't have to hear the music
+// twice (once from the program, once from raccoon man in voice), the program can be turned down to almost nothing
+// while live, and QuietLevel says by how much, so the sound is turned back up by exactly that before it's sent. It's
+// captured as fractions rather than 16-bit numbers for that reason: turned up a thousand times, 16-bit numbers
+// would be mostly noise, and fractions lose nothing.
 //
 // This is the same sequence as Microsoft's ApplicationLoopback sample, written against the Windows audio API
 // directly, because the audio library the app uses for everything else has no call for it.
@@ -18,6 +26,11 @@ sealed class ProcessLoopbackCapture : IDisposable
 	public event Action<byte[], int>? Sound;
 	// Capturing stopped because something went wrong (not because Stop was called)
 	public event Action<Exception>? Failed;
+
+	// The volume the program has been turned down to in the volume mixer (1 = not turned down). Sound that faint is
+	// turned back up by as much (Pcm.FromFloat has the rule).
+	public float QuietLevel { get => quietLevel; set => quietLevel = value is > 0 and < 1 ? value : 1; }
+	volatile float quietLevel = 1;
 
 	Thread? thread;
 	volatile bool stopping;
@@ -74,7 +87,7 @@ sealed class ProcessLoopbackCapture : IDisposable
 			Check(result, "getting the program's sound");
 			client = (IAudioClient)activated;
 
-			var format = new WAVEFORMATEX { wFormatTag = 1, nChannels = Channels, nSamplesPerSec = SampleRate, wBitsPerSample = 16, nBlockAlign = Channels * 2, nAvgBytesPerSec = SampleRate * Channels * 2, cbSize = 0 };
+			var format = new WAVEFORMATEX { wFormatTag = FormatFloat, nChannels = Channels, nSamplesPerSec = SampleRate, wBitsPerSample = 32, nBlockAlign = Channels * 4, nAvgBytesPerSec = SampleRate * Channels * 4, cbSize = 0 };
 			formatPointer = Marshal.AllocHGlobal(Marshal.SizeOf<WAVEFORMATEX>());
 			Marshal.StructureToPtr(format, formatPointer, false);
 			// Shared, loopback, woken by an event, and converted by Windows to the format asked for
@@ -86,6 +99,7 @@ sealed class ProcessLoopbackCapture : IDisposable
 			Check(client.Start(), "starting the capture");
 
 			var buffer = new byte[SampleRate * Channels * 2 / 5];
+			var samples = new float[SampleRate * Channels / 5];
 			while(!stopping)
 			{
 				// Woken when there's sound. The timeout is only so Stop is noticed while the program is silent.
@@ -95,10 +109,16 @@ sealed class ProcessLoopbackCapture : IDisposable
 					Check(capture.GetNextPacketSize(out var waiting), "reading the sound");
 					if(waiting == 0) break;
 					Check(capture.GetBuffer(out var data, out var frames, out var flags, out _, out _), "reading the sound");
-					var bytes = (int)frames * Channels * 2;
+					var count = (int)frames * Channels;
+					var bytes = count * 2;
 					if(bytes > buffer.Length) buffer = new byte[bytes];
+					if(count > samples.Length) samples = new float[count];
 					if((flags & BufferSilent) != 0) Array.Clear(buffer, 0, bytes);
-					else Marshal.Copy(data, buffer, 0, bytes);
+					else
+					{
+						Marshal.Copy(data, samples, 0, count);
+						Pcm.FromFloat(samples.AsSpan(0, count), buffer, quietLevel);
+					}
 					Check(capture.ReleaseBuffer(frames), "reading the sound");
 					if(bytes > 0) Sound?.Invoke(buffer, bytes);
 				}
@@ -132,6 +152,7 @@ sealed class ProcessLoopbackCapture : IDisposable
 	const int ActivationTypeProcessLoopback = 1;
 	const int IncludeProcessTree = 0;
 	const ushort VT_BLOB = 65;
+	const ushort FormatFloat = 3;
 	const uint StreamLoopback = 0x00020000;
 	const uint StreamEventCallback = 0x00040000;
 	const uint StreamAutoConvert = 0x80000000;

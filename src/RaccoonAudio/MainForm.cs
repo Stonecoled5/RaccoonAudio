@@ -12,6 +12,8 @@ sealed class MainForm : Form
 	readonly Label word = new() { AutoSize = true, MaximumSize = new Size(420, 0) };
 	readonly ComboBox programs = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 300 };
 	readonly Button refresh = new() { Text = "Refresh", AutoSize = true };
+	readonly Label sound = new() { AutoSize = true, MaximumSize = new Size(420, 0) };
+	readonly CheckBox quiet = new() { Text = "Don't play it on this computer while I'm live", AutoSize = true };
 	readonly Button live = new() { Text = "Go live", Width = 420, Height = 44 };
 	readonly Button pair = new() { Text = "Pair this computer…", AutoSize = true };
 	readonly RadioButton skipAuto = new() { Text = "Skip the song", AutoSize = true };
@@ -43,7 +45,11 @@ sealed class MainForm : Form
 		page.Controls.Add(Spacer());
 		page.Controls.Add(Heading("Program to stream"));
 		page.Controls.Add(Row(programs, refresh));
+		page.Controls.Add(sound);
 		page.Controls.Add(Note("Only this program's sound is sent, and only while you're live. Nothing else on your computer ever is."));
+		page.Controls.Add(Spacer());
+		page.Controls.Add(quiet);
+		page.Controls.Add(Note("You hear it through raccoon man like everyone else, instead of twice. While you're live the program is turned almost all the way down in Windows' volume mixer, and put back when you stop."));
 		page.Controls.Add(Spacer());
 		page.Controls.Add(live);
 		page.Controls.Add(pair);
@@ -64,6 +70,7 @@ sealed class MainForm : Form
 		Controls.Add(page);
 
 		refresh.Click += (_, _) => FillPrograms();
+		quiet.CheckedChanged += (_, _) => { if(!rendering) app.SetQuietWhileLive(quiet.Checked); };
 		programs.SelectedIndexChanged += (_, _) => { if(!rendering && programs.SelectedItem is AudioProgram chosen) app.ChooseProgram(chosen.Name); };
 		live.Click += (_, _) => app.ToggleLive();
 		pair.Click += (_, _) => AskForCode();
@@ -124,6 +131,12 @@ sealed class MainForm : Form
 		if(dialog.ShowDialog(this) == DialogResult.OK) app.Pair(dialog.Code);
 	}
 
+	// Whether the chosen program is making sound, kept up to date once a second while the window's open
+	public void ShowSound(string text)
+	{
+		if(sound.Text != text) sound.Text = text;
+	}
+
 	// Brings the window in line with what the app is doing
 	public void Render()
 	{
@@ -146,6 +159,8 @@ sealed class MainForm : Form
 		live.Visible = app.HasKey;
 		pair.Visible = !app.HasKey;
 		unpair.Enabled = app.HasKey;
+		quiet.Checked = app.Settings.QuietWhileLive;
+		ShowSound(app.SoundStatus());
 		skipAuto.Checked = app.Settings.SkipAutomatically;
 		skipTell.Checked = !app.Settings.SkipAutomatically;
 		if(!jam.Focused) jam.Text = app.Settings.JamLink;

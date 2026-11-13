@@ -11,6 +11,10 @@ namespace RaccoonAudio;
 // Two rules it never breaks:
 // - Sound is only captured while a stream is live. The moment a stream ends, for any reason, capturing stops.
 // - Only the chosen program is captured, never the whole computer.
+//
+// While live it can also turn that program down to almost nothing on this computer, so the person streaming hears
+// the music once, from raccoon man, instead of twice. Whatever it turns down it puts back: when the stream ends, when
+// the app closes, and, if the app ended badly, the next time it starts.
 sealed class TrayApp : ApplicationContext
 {
 	readonly Settings settings = Settings.Load();
@@ -26,6 +30,14 @@ sealed class TrayApp : ApplicationContext
 	readonly Icon liveIcon = Dot(Color.FromArgb(220, 50, 50));
 	MainForm? window;
 
+	// How far the program is turned down on this computer while live, when that's wanted: a thousandth, which is
+	// as good as silent, and what's sent is turned up by the same
+	public const float QuietLevel = 0.001f;
+	// The program turned down for the stream, and the volume to put it back to, while one is
+	string quietedProgram = "";
+	float? quietedFrom;
+	readonly System.Windows.Forms.Timer everySecond = new() { Interval = 1000 };
+
 	public Settings Settings => settings;
 	public ClientState State => client.State;
 	// The last thing worth telling the person, shown in the window
@@ -36,8 +48,12 @@ sealed class TrayApp : ApplicationContext
 
 	public TrayApp(bool startHidden)
 	{
-		// The window's thread: everything that touches the window or the icon is sent back here
-		ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
+		// The window's thread: everything that touches the window or the icon is sent back here. It's made here, on
+		// that thread, and never taken from whatever context happens to be current: before the first control exists
+		// that can be a plain one that runs things on background threads, and a control first shown from a background
+		// thread freezes the window.
+		ui = new WindowsFormsSynchronizationContext();
+		SynchronizationContext.SetSynchronizationContext(ui);
 		client = new StreamClient(settings.ServerUri() ?? new Uri(Settings.DefaultServer), Settings.LoadKey());
 		client.StateChanged += (state) => ui.Post((_) => OnState(state), null);
 		client.Said += (message) => ui.Post((_) => OnSaid(message), null);
@@ -61,6 +77,17 @@ sealed class TrayApp : ApplicationContext
 		tray.DoubleClick += (_, _) => ShowWindow();
 
 		if(!ProcessLoopbackCapture.Supported) LastWord = "This needs Windows 11. On this version of Windows it can't capture one program's sound, and it won't capture the whole computer instead.";
+		// It ended badly last time while a program was turned down for a stream: put that back
+		if(settings.QuietedProgram != "")
+		{
+			AudioPrograms.TurnBackUp(settings.QuietedProgram, QuietLevel, settings.QuietedFrom);
+			settings.QuietedProgram = "";
+			settings.Save();
+		}
+		AppDomain.CurrentDomain.ProcessExit += (_, _) => Louden();
+		AppDomain.CurrentDomain.UnhandledException += (_, _) => Louden();
+		everySecond.Tick += (_, _) => EverySecond();
+		everySecond.Start();
 		client.Start();
 		if(!startHidden) ShowWindow();
 	}
@@ -124,7 +151,20 @@ sealed class TrayApp : ApplicationContext
 		settings.Program = name;
 		settings.Save();
 		// Changing it mid-stream switches what's being sent
-		if(client.State == ClientState.Live) StartCapture();
+		if(client.State == ClientState.Live)
+		{
+			Louden();
+			StartCapture();
+		}
+	}
+
+	public void SetQuietWhileLive(bool quiet)
+	{
+		settings.QuietWhileLive = quiet;
+		settings.Save();
+		if(client.State != ClientState.Live) return;
+		if(quiet) Quieten();
+		else Louden();
 	}
 
 	public void SetSkipAutomatically(bool automatically)
@@ -167,11 +207,13 @@ sealed class TrayApp : ApplicationContext
 	public async Task ExitAsync()
 	{
 		tray.Visible = false;
+		everySecond.Stop();
 		StopCapture();
 		await client.StopAsync();
 		client.Dispose();
 		media.Dispose();
 		capture.Dispose();
+		everySecond.Dispose();
 		tray.Dispose();
 		ExitThread();
 	}
@@ -233,6 +275,7 @@ sealed class TrayApp : ApplicationContext
 		}
 		framer.Reset();
 		capture.Start(process.Value);
+		Quieten();
 		_ = FollowMediaAsync();
 	}
 
@@ -247,7 +290,61 @@ sealed class TrayApp : ApplicationContext
 	void StopCapture()
 	{
 		capture.Stop();
+		Louden();
 		media.Stop();
+	}
+
+	// Turns the program down to almost nothing on this computer, if that's wanted, and has what's captured turned
+	// up to match. What's captured is only turned up once the program really is turned down: turned up when it
+	// isn't, a quiet passage would come out as a roar.
+	void Quieten()
+	{
+		if(!settings.QuietWhileLive)
+		{
+			capture.QuietLevel = 1;
+			return;
+		}
+		var was = AudioPrograms.TurnDown(settings.Program, QuietLevel);
+		if(was != null && quietedFrom == null)
+		{
+			quietedFrom = was;
+			quietedProgram = settings.Program;
+			settings.QuietedProgram = quietedProgram;
+			settings.QuietedFrom = was.Value;
+			settings.Save();
+		}
+		capture.QuietLevel = AudioPrograms.TurnedDown(settings.Program, QuietLevel) ? QuietLevel : 1;
+	}
+
+	// Puts the program's volume back. Safe to call when nothing was turned down, and from any thread.
+	void Louden()
+	{
+		capture.QuietLevel = 1;
+		var from = quietedFrom;
+		if(from == null) return;
+		quietedFrom = null;
+		AudioPrograms.TurnBackUp(quietedProgram, QuietLevel, from.Value);
+		quietedProgram = "";
+		settings.QuietedProgram = "";
+		settings.Save();
+	}
+
+	void EverySecond()
+	{
+		// A program that opened its sound after the stream started, or whose slider was moved, is turned down again
+		if(client.State == ClientState.Live) Quieten();
+		if(window is { IsDisposed: false, Visible: true }) window.ShowSound(SoundStatus());
+	}
+
+	// Whether the chosen program is making sound right now, in words, for under the list of programs
+	public string SoundStatus()
+	{
+		var name = settings.Program;
+		if(AudioPrograms.ProcessFor(name) == null) return name + " isn't running.";
+		var live = client.State == ClientState.Live;
+		if(!AudioPrograms.MakingSound(name, quietedFrom != null ? QuietLevel : 1)) return name + " is quiet right now." + (live ? " Nothing goes out until it plays." : "");
+		if(!live) return name + " is making sound right now.";
+		return quietedFrom != null ? name + " is playing. It's turned down on this computer while you're live, so you hear it through raccoon man." : name + " is playing, and going out to the voice channel.";
 	}
 
 	// Something to tell the person: kept for the window, and popped up by the clock if it matters when they're

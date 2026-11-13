@@ -22,10 +22,19 @@ sealed class Settings
 	// When the channel votes to skip: skip the song, or only say so
 	public bool SkipAutomatically { get; set; } = true;
 	public string JamLink { get; set; } = "";
+	// While live, turn the program down to almost nothing on this computer, so the person streaming hears it once
+	// (from raccoon man, like everyone else) instead of twice
+	public bool QuietWhileLive { get; set; } = true;
+	// The program that's turned down for a stream right now, and the volume to put it back to. Kept here so that if
+	// the app ends badly mid-stream, the next start puts the volume back.
+	public string QuietedProgram { get; set; } = "";
+	public float QuietedFrom { get; set; } = 1;
 
-	static readonly string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RaccoonAudio");
-	static readonly string settingsFile = Path.Combine(folder, "settings.json");
-	static readonly string keyFile = Path.Combine(folder, "key.bin");
+	// Where it's all kept. Only ever changed by --profile, for trying the app without touching the real pairing.
+	public static string Folder { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RaccoonAudio");
+	static string folder => Folder;
+	static string settingsFile => Path.Combine(folder, "settings.json");
+	static string keyFile => Path.Combine(folder, "key.bin");
 	// Mixed in when encrypting, so another program's DPAPI data can't be passed off as this one's
 	static readonly byte[] purpose = Encoding.UTF8.GetBytes("RaccoonAudio device key v1");
 
