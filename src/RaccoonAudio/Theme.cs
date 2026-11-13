@@ -54,9 +54,10 @@ static class Theme
 				box.BorderStyle = BorderStyle.FixedSingle;
 				break;
 			case ComboBox list:
-				list.FlatStyle = FlatStyle.Flat;
+				// Windows' own dark look for lists: a closed drop-down list ignores BackColor and stays white otherwise
 				list.BackColor = Surface;
 				list.ForeColor = Text;
+				DarkTheme(list, "DarkMode_CFD");
 				break;
 			case CheckBox or RadioButton:
 				((ButtonBase)control).FlatStyle = FlatStyle.Flat;
@@ -72,7 +73,7 @@ static class Theme
 				control.ForeColor = Text;
 				break;
 		}
-		if(control is ScrollableControl { AutoScroll: true }) DarkScrollBars(control);
+		if(control is ScrollableControl { AutoScroll: true }) DarkTheme(control, "DarkMode_Explorer");
 		foreach(Control child in control.Controls) Apply(child);
 	}
 
@@ -90,11 +91,12 @@ static class Theme
 		}
 	}
 
-	static void DarkScrollBars(Control control)
+	// Dark scroll bars and lists, the way Windows draws them in dark mode
+	static void DarkTheme(Control control, string theme)
 	{
 		void dark()
 		{
-			try { SetWindowTheme(control.Handle, "DarkMode_Explorer", null); } catch(Exception) { }
+			try { SetWindowTheme(control.Handle, theme, null); } catch(Exception) { }
 		}
 		if(control.IsHandleCreated) dark();
 		else control.HandleCreated += (_, _) => dark();
@@ -158,6 +160,55 @@ sealed class AccentButton : Button
 			using var ring = new Pen(Color.FromArgb(160, Color.White), 1.5f);
 			using var inner = Theme.Rounded(RectangleF.Inflate(area, -3, -3), Height / 4f - 3);
 			g.DrawPath(ring, inner);
+		}
+	}
+}
+
+// The strip between the two sides of the main window. A click folds the requests away or opens them again. The arrow
+// points the way they go (open) or come back from (folded); folded, it also says how many are waiting.
+sealed class FoldStrip : Control
+{
+	bool open = true;
+	int waiting;
+	bool hovering;
+	public bool Shown { get; private set; }
+
+	public FoldStrip()
+	{
+		SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+		Cursor = Cursors.Hand;
+		Font = new Font(SystemFonts.MessageBoxFont!.FontFamily, 8, FontStyle.Bold);
+	}
+
+	public void Show(bool open, int waiting)
+	{
+		this.open = open;
+		this.waiting = waiting;
+		Shown = true;
+		Invalidate();
+	}
+
+	protected override void OnMouseEnter(EventArgs e) { hovering = true; Invalidate(); base.OnMouseEnter(e); }
+	protected override void OnMouseLeave(EventArgs e) { hovering = false; Invalidate(); base.OnMouseLeave(e); }
+
+	protected override void OnPaint(PaintEventArgs e)
+	{
+		var g = e.Graphics;
+		g.SmoothingMode = SmoothingMode.AntiAlias;
+		using var fill = new SolidBrush(hovering ? Theme.Raised : Theme.Surface);
+		g.FillRectangle(fill, ClientRectangle);
+		// A chevron in the middle: > folds the requests away to the right, < brings them back
+		float x = Width / 2f, y = Height / 2f, half = 6;
+		using var pen = new Pen(hovering ? Theme.Cyan : Theme.Muted, 2.5f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+		var tip = open ? x + half / 2 : x - half / 2;
+		var back = open ? x - half / 2 : x + half / 2;
+		g.DrawLines(pen, [new PointF(back, y - half), new PointF(tip, y), new PointF(back, y + half)]);
+		if(!open && waiting > 0)
+		{
+			var badge = new RectangleF(2, y + 14, Width - 4, Width - 4);
+			using var bubble = new LinearGradientBrush(badge, Theme.Cyan, Theme.Purple, LinearGradientMode.Vertical);
+			g.FillEllipse(bubble, badge);
+			TextRenderer.DrawText(g, waiting > 99 ? "99+" : waiting.ToString(), Font, Rectangle.Round(badge), Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
 		}
 	}
 }

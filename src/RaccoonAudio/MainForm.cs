@@ -35,6 +35,10 @@ sealed class MainForm : Form
 	readonly Button applyServer = new() { Text = "Use this address", AutoSize = true };
 	readonly CheckBox startup = new() { Text = "Start with Windows (in the tray, not live)", AutoSize = true };
 	readonly Button unpair = new() { Text = "Unpair this computer", AutoSize = true };
+	readonly CheckBox updateOnStartup = new() { Text = "Update automatically when the app starts", AutoSize = true };
+	// Between the two sides: folds the requests away, or opens them again
+	readonly FoldStrip requestsToggle = new() { Dock = DockStyle.Fill, Margin = new Padding(0) };
+	readonly ToolTip tips = new();
 	readonly Label requestsTitle = new() { Text = "Requests", AutoSize = true, Font = new Font(SystemFonts.MessageBoxFont!.FontFamily, 12, FontStyle.Bold), Margin = new Padding(3, 4, 12, 3) };
 	readonly Button clearRequests = new() { Text = "Clear all", AutoSize = true };
 	readonly FlowLayoutPanel requestRows = new() { FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Dock = DockStyle.Fill };
@@ -86,6 +90,7 @@ sealed class MainForm : Form
 		advancedPanel.Controls.Add(server);
 		advancedPanel.Controls.Add(applyServer);
 		advancedPanel.Controls.Add(startup);
+		advancedPanel.Controls.Add(updateOnStartup);
 		advancedPanel.Controls.Add(unpair);
 		advancedPanel.Controls.Add(Row(version, checkForUpdate));
 		page.Controls.Add(advancedPanel);
@@ -105,17 +110,21 @@ sealed class MainForm : Form
 		var wanted = page.GetPreferredSize(Size.Empty);
 		advancedPanel.Visible = false;
 		var leftWidth = Math.Max(wanted.Width, 440) + SystemInformation.VerticalScrollBarWidth + 8;
-		var columns = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
+		this.leftWidth = leftWidth;
+		this.right = right;
+		columns = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
 		columns.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, leftWidth));
+		columns.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, ToggleWidth));
 		columns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 		columns.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 		columns.Controls.Add(left, 0, 0);
-		columns.Controls.Add(right, 1, 0);
+		columns.Controls.Add(requestsToggle, 1, 0);
+		columns.Controls.Add(right, 2, 0);
 		Controls.Add(columns);
 		// Tall enough for the left side once its text is filled in, without being taller than the screen
 		var room = (Screen.PrimaryScreen?.WorkingArea.Height ?? 800) - 80;
-		ClientSize = new Size(leftWidth + 380 + Padding.Horizontal, Math.Min(Math.Max(wanted.Height + 150, 600), room));
-		MinimumSize = new Size(leftWidth + 300, 420);
+		ClientSize = new Size(leftWidth + ToggleWidth + 380 + Padding.Horizontal, Math.Min(Math.Max(wanted.Height + 150, 600), room));
+		requestsToggle.Click += (_, _) => app.SetRequestsOpen(!app.Settings.RequestsOpen);
 
 		refresh.Click += (_, _) => FillPrograms();
 		// Opening the list brings it up to date too
@@ -148,6 +157,7 @@ sealed class MainForm : Form
 			if(!await app.SetServerAsync(server.Text)) MessageBox.Show(this, "That address won't work. It has to start with wss:// (or ws://127.0.0.1 for a copy running on this computer).", Text);
 		};
 		startup.CheckedChanged += (_, _) => { if(!rendering) Settings.StartsWithWindows = startup.Checked; };
+		updateOnStartup.CheckedChanged += (_, _) => { if(!rendering) app.SetUpdateOnStartup(updateOnStartup.Checked); };
 		unpair.Click += async (_, _) =>
 		{
 			if(MessageBox.Show(this, "Unpair this computer? It comes off your list in /me too, and you'll need a new pairing code to use it again.", Text, MessageBoxButtons.OKCancel) == DialogResult.OK) await app.UnpairAsync();
@@ -164,6 +174,54 @@ sealed class MainForm : Form
 		FillPrograms();
 		Render();
 		ShowRequests(app.Requests);
+		ShowRequestsSide();
+	}
+
+	const int ToggleWidth = 24;
+	readonly int leftWidth;
+	readonly TableLayoutPanel columns;
+	readonly TableLayoutPanel right;
+	// How wide the requests side was when it was folded away, to open it at the same width
+	int requestsWidth = 380;
+
+	// Opens or folds away the requests side, as the setting says. Folded, the window narrows to the left side (which
+	// then takes any extra width), and the toggle between them points the way the requests come back.
+	public void ShowRequestsSide()
+	{
+		var open = app.Settings.RequestsOpen;
+		if(open != right.Visible || !requestsToggle.Shown)
+		{
+			SuspendLayout();
+			var frame = Width - ClientSize.Width;
+			if(open)
+			{
+				columns.ColumnStyles[0] = new ColumnStyle(SizeType.Absolute, leftWidth);
+				columns.ColumnStyles[2] = new ColumnStyle(SizeType.Percent, 100);
+				right.Visible = true;
+				MinimumSize = new Size(leftWidth + ToggleWidth + 300 + Padding.Horizontal + frame, 420);
+				if(Width < MinimumSize.Width + 80) Width = leftWidth + ToggleWidth + requestsWidth + Padding.Horizontal + frame;
+			}
+			else
+			{
+				if(right.Visible && right.Width > 0) requestsWidth = right.Width;
+				right.Visible = false;
+				columns.ColumnStyles[0] = new ColumnStyle(SizeType.Percent, 100);
+				columns.ColumnStyles[2] = new ColumnStyle(SizeType.Absolute, 0);
+				MinimumSize = new Size(leftWidth + ToggleWidth + Padding.Horizontal + frame, 420);
+				Width = MinimumSize.Width;
+			}
+			ResumeLayout();
+		}
+		ShowToggle();
+	}
+
+	// The arrow points where the requests go (open) or come from (folded), and folded it says how many are waiting
+	void ShowToggle()
+	{
+		var open = app.Settings.RequestsOpen;
+		var waiting = app.Requests.Count;
+		requestsToggle.Show(open, open ? 0 : waiting);
+		tips.SetToolTip(requestsToggle, open ? "Hide the requests" : waiting > 0 ? "Show the requests (" + waiting + " waiting)" : "Show the requests");
 	}
 
 	const string Collapsed = "▸  Advanced";
@@ -181,6 +239,7 @@ sealed class MainForm : Form
 			old.Dispose();
 		}
 		requestsTitle.Text = requests.Count == 0 ? "Requests" : "Requests (" + requests.Count + ")";
+		if(requestsToggle.Shown) ShowToggle();
 		clearRequests.Visible = requests.Count > 0;
 		if(requests.Count == 0) requestRows.Controls.Add(new Label { Text = "No requests yet. People in your voice channel ask for songs with /radio add, and they wait here until you tick them off.", AutoSize = true, ForeColor = Theme.Muted, Tag = "wrap" });
 		foreach(var request in requests)
@@ -297,6 +356,7 @@ sealed class MainForm : Form
 		if(!jam.Focused) jam.Text = app.Settings.JamLink;
 		if(!server.Focused) server.Text = app.Settings.Server;
 		startup.Checked = Settings.StartsWithWindows;
+		updateOnStartup.Checked = app.Settings.UpdateOnStartup;
 		rendering = false;
 	}
 }

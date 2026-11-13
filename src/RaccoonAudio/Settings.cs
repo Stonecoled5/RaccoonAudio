@@ -34,6 +34,8 @@ sealed class Settings
 	public string UpdateOffered { get; set; } = "";
 	// When the app starts and a newer version is out, install it then and there (unless it's live), instead of asking
 	public bool UpdateOnStartup { get; set; } = true;
+	// Whether the requests side of the window is open, or folded away so only the left side shows
+	public bool RequestsOpen { get; set; } = true;
 
 	// Where it's all kept. Only ever changed by --profile, for trying the app without touching the real pairing.
 	public static string Folder { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RaccoonAudio");

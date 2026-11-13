@@ -13,6 +13,7 @@ sealed class UpdateForm : Form
 	public UpdateForm(AppVersion newer, AppVersion running, string why)
 	{
 		Text = "Raccoon Audio update";
+		Icon = Theme.AppIcon;
 		FormBorderStyle = FormBorderStyle.FixedDialog;
 		MaximizeBox = false;
 		MinimizeBox = false;
@@ -24,6 +25,10 @@ sealed class UpdateForm : Form
 		Padding = new Padding(16);
 
 		var page = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
+		var face = new PictureBox { Image = Theme.Picture, SizeMode = PictureBoxSizeMode.Zoom, Size = new Size(72, 72), Margin = new Padding(0, 0, 12, 0) };
+		var side = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
+		side.Controls.Add(face);
+		side.Controls.Add(page);
 		page.Controls.Add(new Label
 		{
 			Text = "Raccoon Audio version " + newer + " is out",
@@ -41,13 +46,15 @@ sealed class UpdateForm : Form
 		});
 		if(why != "") page.Controls.Add(new Label { Text = why, AutoSize = true, UseMnemonic = false, MaximumSize = new Size(380, 0), Margin = new Padding(3, 8, 3, 3) });
 
-		var update = new Button { Text = "Update now", AutoSize = true };
-		var later = new Button { Text = "Later", AutoSize = true, DialogResult = DialogResult.Cancel };
+		var update = new AccentButton { Text = "Update now", Size = new Size(170, 40), Font = new Font(SystemFonts.MessageBoxFont!.FontFamily, 11, FontStyle.Bold) };
+		var later = new Button { Text = "Later", Size = new Size(90, 40), DialogResult = DialogResult.Cancel, Margin = new Padding(8, 3, 3, 3) };
 		var buttons = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 12, 0, 0) };
 		buttons.Controls.Add(update);
 		buttons.Controls.Add(later);
 		page.Controls.Add(buttons);
-		Controls.Add(page);
+		Controls.Add(side);
+		Theme.Apply(this);
+		HandleCreated += (_, _) => Theme.DarkTitleBar(this);
 		AcceptButton = update;
 		CancelButton = later;
 

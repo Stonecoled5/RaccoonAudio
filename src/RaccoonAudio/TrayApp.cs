@@ -351,6 +351,14 @@ sealed class TrayApp : ApplicationContext
 	}
 
 	// The person's setting for installing what the look at startup finds
+	// Opens or folds away the requests side of the window, and remembers it
+	public void SetRequestsOpen(bool open)
+	{
+		settings.RequestsOpen = open;
+		settings.Save();
+		if(window != null && !window.IsDisposed) window.ShowRequestsSide();
+	}
+
 	public void SetUpdateOnStartup(bool on)
 	{
 		settings.UpdateOnStartup = on;
