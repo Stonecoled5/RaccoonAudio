@@ -4,7 +4,7 @@ namespace RaccoonAudio;
 
 // How this copy was started: in the tray or with its window, where it looks for updates, whether it's the new copy
 // after an update, and the development flags that go with those
-sealed record Startup(bool Hidden, Core.UpdateSource Updates, bool AfterUpdate, string? UpdateReport, string Separate, string[] Args);
+sealed record Startup(bool Hidden, Core.UpdateSource Updates, bool AfterUpdate, string? UpdateReport, string Separate, string[] Args, Uri? Server = null);
 
 static class Program
 {
@@ -70,9 +70,23 @@ static class Program
 		var test = Array.IndexOf(args, "--update-test");
 		var report = updates.IsTest && test >= 0 && test + 1 < args.Length ? Path.GetFullPath(args[test + 1]) : null;
 
+		// For trying the app against a copy of raccoon man somewhere else: RaccoonAudio --server <address> connects
+		// there for this run only (wss://, or ws:// on this computer). Without it, it's always the real raccoon man.
+		Uri? server = null;
+		var at = Array.IndexOf(args, "--server");
+		if(at >= 0)
+		{
+			server = at + 1 < args.Length ? Settings.ServerUri(args[at + 1]) : null;
+			if(server == null)
+			{
+				MessageBox.Show("--server takes an address starting with wss:// (or ws://127.0.0.1 for a copy running on this computer).", "Raccoon Audio");
+				return 1;
+			}
+		}
+
 		var afterUpdate = args.Contains("--after-update");
 		// Started with Windows, it sits by the clock without opening its window
-		var startup = new Startup(args.Contains("--tray"), updates, afterUpdate, report, separate, args);
+		var startup = new Startup(args.Contains("--tray"), updates, afterUpdate, report, separate, args, server);
 		ApplicationConfiguration.Initialize();
 #if DEBUG
 		// In a development build, touching the window from the wrong thread fails loudly instead of now and then

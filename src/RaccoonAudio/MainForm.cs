@@ -18,12 +18,12 @@ sealed class MainForm : Form
 	readonly FlowLayoutPanel updateRow;
 	readonly Label version = new() { AutoSize = true, UseMnemonic = false, Margin = new Padding(3, 8, 3, 0) };
 	readonly Button checkForUpdate = new() { Text = "Check for updates", AutoSize = true };
-	readonly ComboBox programs = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 300 };
+	readonly DropList programs = new() { Width = 300, AccessibleName = "Program to stream" };
 	readonly Button refresh = new() { Text = "Refresh", AutoSize = true };
 	readonly Label sound = new() { AutoSize = true, MaximumSize = new Size(420, 0), UseMnemonic = false };
 	readonly CheckBox quiet = new() { Text = "Don't play it on this computer while I'm live", AutoSize = true };
 	readonly AccentButton live = new() { Text = "Go live", Width = 420, Height = 48 };
-	readonly Button pair = new() { Text = "Pair this computer…", AutoSize = true };
+	readonly Button pair = new() { Text = "Pair with raccoon man", AutoSize = true };
 	readonly RadioButton skipAuto = new() { Text = "Skip the song", AutoSize = true };
 	readonly RadioButton skipTell = new() { Text = "Just tell me", AutoSize = true };
 	readonly TextBox jam = new() { Width = 300, PlaceholderText = "https://spotify.link/…" };
@@ -31,10 +31,8 @@ sealed class MainForm : Form
 	// Opens and closes the advanced settings: a chevron and the word, pointing down while they're open
 	readonly Expander advanced = new() { Text = "Advanced", Margin = new Padding(0, 3, 3, 3) };
 	readonly FlowLayoutPanel advancedPanel = new() { FlowDirection = FlowDirection.TopDown, AutoSize = true, Visible = false, WrapContents = false };
-	readonly TextBox server = new() { Width = 420 };
-	readonly Button applyServer = new() { Text = "Use this address", AutoSize = true };
 	readonly CheckBox startup = new() { Text = "Start with Windows (in the tray, not live)", AutoSize = true };
-	readonly Button unpair = new() { Text = "Unpair this computer", AutoSize = true };
+	readonly Button unpair = new() { Text = "Unpair", AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
 	readonly CheckBox updateOnStartup = new() { Text = "Update automatically when the app starts", AutoSize = true };
 	// Between the two sides: folds the requests away, or opens them again
 	readonly FoldStrip requestsToggle = new() { Dock = DockStyle.Fill, Margin = new Padding(0) };
@@ -48,7 +46,7 @@ sealed class MainForm : Form
 	{
 		this.app = app;
 		Text = "Raccoon Audio";
-		Padding = new Padding(14);
+		Padding = new Padding(18);
 		StartPosition = FormStartPosition.CenterScreen;
 
 		Icon = Theme.AppIcon;
@@ -74,8 +72,10 @@ sealed class MainForm : Form
 		page.Controls.Add(quiet);
 		page.Controls.Add(Note("You hear it through raccoon man like everyone else, instead of twice. While you're live the program is turned almost all the way down in Windows' volume mixer, and put back when you stop."));
 		page.Controls.Add(Spacer());
+		// Not paired: Pair with raccoon man. Paired: Go live (or Stop), with Unpair under it
 		page.Controls.Add(live);
 		page.Controls.Add(pair);
+		page.Controls.Add(unpair);
 		page.Controls.Add(Spacer());
 		page.Controls.Add(Heading("When the channel votes to skip"));
 		page.Controls.Add(Row(skipAuto, skipTell));
@@ -85,13 +85,10 @@ sealed class MainForm : Form
 		page.Controls.Add(Note("He posts it in the voice channel's chat so people can add songs from their own Spotify."));
 		page.Controls.Add(Spacer());
 		page.Controls.Add(advanced);
-		advancedPanel.Controls.Add(Heading("Raccoon man's address"));
-		// The button goes under the address, so the address can be as wide as everything else
-		advancedPanel.Controls.Add(server);
-		advancedPanel.Controls.Add(applyServer);
+		// The two switches, then, with room between, the version
 		advancedPanel.Controls.Add(startup);
 		advancedPanel.Controls.Add(updateOnStartup);
-		advancedPanel.Controls.Add(unpair);
+		advancedPanel.Controls.Add(Spacer());
 		advancedPanel.Controls.Add(Row(version, checkForUpdate));
 		page.Controls.Add(advancedPanel);
 
@@ -151,10 +148,6 @@ sealed class MainForm : Form
 		{
 			advancedPanel.Visible = advanced.Open;
 			if(advancedPanel.Visible) left.ScrollControlIntoView(advancedPanel);
-		};
-		applyServer.Click += async (_, _) =>
-		{
-			if(!await app.SetServerAsync(server.Text)) MessageBox.Show(this, "That address won't work. It has to start with wss:// (or ws://127.0.0.1 for a copy running on this computer).", Text);
 		};
 		startup.CheckedChanged += (_, _) => { if(!rendering) Settings.StartsWithWindows = startup.Checked; };
 		updateOnStartup.CheckedChanged += (_, _) => { if(!rendering) app.SetUpdateOnStartup(updateOnStartup.Checked); };
@@ -275,13 +268,15 @@ sealed class MainForm : Form
 		}
 	}
 
-	static Label Heading(string text) => new() { Text = text, AutoSize = true, Font = new Font(SystemFonts.MessageBoxFont!, FontStyle.Bold), Margin = new Padding(3, 3, 3, 2) };
+	static Label Heading(string text) => new() { Text = text, AutoSize = true, Font = new Font(SystemFonts.MessageBoxFont!, FontStyle.Bold), Margin = new Padding(3, 3, 3, 5) };
 	static Label Note(string text) => new() { Text = text, AutoSize = true, MaximumSize = new Size(420, 0), ForeColor = SystemColors.GrayText };
-	static Control Spacer() => new Panel { Height = 8, Width = 10 };
+	static Control Spacer() => new Panel { Height = 14, Width = 10 };
 
 	static FlowLayoutPanel Row(params Control[] controls)
 	{
-		var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
+		var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 2, 0, 2) };
+		// A little room between a field and the button beside it
+		for(var i = 1; i < controls.Length; i++) controls[i].Margin = new Padding(controls[i].Margin.Left + 6, controls[i].Margin.Top, controls[i].Margin.Right, controls[i].Margin.Bottom);
 		row.Controls.AddRange(controls);
 		return row;
 	}
@@ -297,7 +292,7 @@ sealed class MainForm : Form
 		// The chosen one stays in the list when it has no sound open, saying why it isn't among the others
 		if(!found.Any((p) => string.Equals(p.Name, wanted, StringComparison.OrdinalIgnoreCase))) found.Insert(0, new AudioProgram(wanted, wanted + (AudioPrograms.ProcessFor(wanted) == null ? NotRunning : "  (no sound yet)"), 0, false));
 		programs.Items.Clear();
-		programs.Items.AddRange(found.Cast<object>().ToArray());
+		programs.Items.AddRange(found.Cast<object>());
 		programs.SelectedItem = found.First((p) => string.Equals(p.Name, wanted, StringComparison.OrdinalIgnoreCase));
 		rendering = false;
 	}
@@ -326,7 +321,7 @@ sealed class MainForm : Form
 		status.ForeColor = isLive ? Theme.Live : Theme.Text;
 		word.Text = app.LastWord != "" ? app.LastWord : state switch
 		{
-			ClientState.NeedsPairing => "In Discord, run /me, open Audio app… and get a pairing code. Then press Pair this computer.",
+			ClientState.NeedsPairing => "In Discord, run /me, open Audio app… and get a pairing code. Then press Pair with raccoon man.",
 			ClientState.Connected => "Join a voice channel in Discord, then press Go live.",
 			ClientState.Live => "Everyone in your voice channel hears " + app.Settings.Program + ". /radio in that channel's chat controls it.",
 			ClientState.Reconnecting => "Lost the connection to raccoon man. Trying again by itself.",
@@ -346,13 +341,12 @@ sealed class MainForm : Form
 		checkForUpdate.Enabled = !app.Updating;
 		live.Visible = app.HasKey;
 		pair.Visible = !app.HasKey;
-		unpair.Enabled = app.HasKey;
+		unpair.Visible = app.HasKey;
 		quiet.Checked = app.Settings.QuietWhileLive;
 		ShowSound(app.SoundStatus());
 		skipAuto.Checked = app.Settings.SkipAutomatically;
 		skipTell.Checked = !app.Settings.SkipAutomatically;
 		if(!jam.Focused) jam.Text = app.Settings.JamLink;
-		if(!server.Focused) server.Text = app.Settings.Server;
 		startup.Checked = Settings.StartsWithWindows;
 		updateOnStartup.Checked = app.Settings.UpdateOnStartup;
 		rendering = false;
@@ -374,7 +368,7 @@ sealed class PairForm : Form
 		MinimizeBox = false;
 		AutoSize = true;
 		AutoSizeMode = AutoSizeMode.GrowAndShrink;
-		Padding = new Padding(14);
+		Padding = new Padding(18);
 		StartPosition = FormStartPosition.CenterParent;
 		var ok = new Button { Text = "Pair", AutoSize = true, Enabled = false };
 		var cancel = new Button { Text = "Cancel", AutoSize = true, DialogResult = DialogResult.Cancel };

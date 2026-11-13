@@ -15,8 +15,6 @@ sealed class Settings
 {
 	public const string DefaultServer = "wss://raccoon-man-a29f1b3c7e03.herokuapp.com/stream";
 
-	// Where raccoon man's stream server is. Only changed for testing against a copy on this computer.
-	public string Server { get; set; } = DefaultServer;
 	// The program to stream, by process name
 	public string Program { get; set; } = "Spotify";
 	// When the channel votes to skip: skip the song, or only say so
@@ -71,11 +69,12 @@ sealed class Settings
 		}
 	}
 
-	// The server address if it's one the app can use, or null. Encrypted only, except for a copy of the server
-	// running on this same computer, which is how it's tested.
-	public Uri? ServerUri()
+	// A server address the app can use, or null: encrypted only, except for a copy of the server running on this same
+	// computer, which is how it's tested. Only ever given with --server; the app otherwise always uses DefaultServer.
+	// (Older versions kept an address in the settings file; it's ignored now.)
+	public static Uri? ServerUri(string address)
 	{
-		if(!Uri.TryCreate(Server.Trim(), UriKind.Absolute, out var url)) return null;
+		if(!Uri.TryCreate(address.Trim(), UriKind.Absolute, out var url)) return null;
 		if(url.Scheme == "wss") return url;
 		return url.Scheme == "ws" && url.IsLoopback ? url : null;
 	}

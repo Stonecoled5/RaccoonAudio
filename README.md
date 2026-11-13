@@ -96,9 +96,9 @@ what changed and build it yourself (below).
 
 1. In Discord, run `/me`, open **Audio app…** and press **Get a pairing code**. Only you can see it. It works once and
    runs out after ten minutes. Don't share it: whoever uses it can play audio as you.
-2. In the app, press **Pair this computer…** and type the six characters.
+2. In the app, press **Pair with raccoon man** and type the six characters.
 
-You can pair up to three computers. To unpair one, press **Unpair this computer** under **Advanced** in the app: it
+You can pair up to three computers. To unpair one, press **Unpair** under **Go live** in the app (it shows once a computer is paired): it
 comes off your list in `/me` too. (If the bot can't be reached right then, the app says so; finish in `/me` →
 **Audio app…** in Discord.) You can also unpair any of them from `/me`.
 
@@ -199,7 +199,7 @@ These are for development. None of them touches your saved key.
   computer with a stand-in for voice, and prints an address and a pairing code. With a number of requests, it sends
   that many made-up song requests once the app goes live, and says when they're ticked off. Then
   `RaccoonAudio.exe --connect-test <address> <code> <seconds> report.txt` pairs, signs in, goes live, streams a test
-  tone and stops. To try the real app against it, start it with `--profile` and put the address under **Advanced**.
+  tone and stops. To try the real app against it, start it with `--profile <folder> --server <address>`.
 - `node scripts/fake-release.mjs <zip> <version> [port] [how it goes]`: a stand-in for GitHub's releases on this
   computer, for trying an update without publishing one. Build an older and a newer copy (the `dotnet publish` line
   above with `-p:Version=0.1.0` and `-p:Version=0.1.1`, to two folders), zip the newer `RaccoonAudio.exe` as

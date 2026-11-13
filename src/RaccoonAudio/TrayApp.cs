@@ -95,7 +95,7 @@ sealed class TrayApp : ApplicationContext
 		// thread freezes the window.
 		ui = new WindowsFormsSynchronizationContext();
 		SynchronizationContext.SetSynchronizationContext(ui);
-		client = new StreamClient(settings.ServerUri() ?? new Uri(Settings.DefaultServer), Settings.LoadKey());
+		client = new StreamClient(startup.Server ?? new Uri(Settings.DefaultServer), Settings.LoadKey());
 		client.StateChanged += (state) => ui.Post((_) => OnState(state), null);
 		client.Said += (message) => ui.Post((_) => OnSaid(message), null);
 		client.Problem += (text) => ui.Post((_) => Tell(text, true), null);
@@ -690,25 +690,6 @@ sealed class TrayApp : ApplicationContext
 		settings.JamLink = link.Trim();
 		settings.Save();
 		if(settings.JamLink != "") client.SendJam(settings.JamLink);
-		return true;
-	}
-
-	// Points the app at another server. False if the address isn't one it will use.
-	public async Task<bool> SetServerAsync(string address)
-	{
-		var before = settings.Server;
-		settings.Server = address.Trim();
-		var url = settings.ServerUri();
-		if(url == null)
-		{
-			settings.Server = before;
-			return false;
-		}
-		settings.Save();
-		await client.StopAsync();
-		StopCapture();
-		client.Server = url;
-		client.Start();
 		return true;
 	}
 
