@@ -38,6 +38,11 @@ sealed class TrayApp : ApplicationContext
 	readonly ToolStripMenuItem requestsItem = new("Requests");
 	// How many requests the icon's menu lists before it just counts the rest
 	const int MenuRequests = 10;
+	// The list is redrawn a moment after it changes, so a burst of requests is one redraw, not one each
+	readonly System.Windows.Forms.Timer requestsRedraw = new() { Interval = 100 };
+	// What the window was last told the app is doing, and when it last went live
+	ClientState shownState = ClientState.Off;
+	DateTime wentLiveAt = DateTime.MinValue;
 	MainForm? window;
 
 	// How far the program is turned down on this computer while live, when that's wanted: a thousandth, which is
@@ -82,7 +87,12 @@ sealed class TrayApp : ApplicationContext
 		menu.Opening += (_, _) => RequestsSeen();
 		// Clicking a pop-up by the clock opens the window, where the requests are
 		tray.BalloonTipClicked += (_, _) => ShowWindow();
-		RequestsChanged();
+		requestsRedraw.Tick += (_, _) =>
+		{
+			requestsRedraw.Stop();
+			DrawRequests();
+		};
+		DrawRequests();
 		menu.Items.Add(new ToolStripSeparator());
 		menu.Items.Add("Exit", null, async (_, _) => await ExitAsync());
 		liveItem.Click += (_, _) => ToggleLive();
@@ -167,8 +177,13 @@ sealed class TrayApp : ApplicationContext
 		tray.Icon = IconFor(client.State);
 	}
 
-	// Brings the icon, its menu and the window in line with the list
+	// The list changed: the icon, its menu and the window are brought in line in a moment
 	void RequestsChanged()
+	{
+		if(!requestsRedraw.Enabled) requestsRedraw.Start();
+	}
+
+	void DrawRequests()
 	{
 		tray.Icon = IconFor(client.State);
 		var all = requests.All;
@@ -315,6 +330,7 @@ sealed class TrayApp : ApplicationContext
 		media.Dispose();
 		capture.Dispose();
 		everySecond.Dispose();
+		requestsRedraw.Dispose();
 		tray.Dispose();
 		ExitThread();
 	}
@@ -323,6 +339,8 @@ sealed class TrayApp : ApplicationContext
 
 	void OnState(ClientState state)
 	{
+		shownState = state;
+		if(state == ClientState.Live) wentLiveAt = DateTime.UtcNow;
 		if(state == ClientState.Live)
 		{
 			LastWord = "";
@@ -355,8 +373,10 @@ sealed class TrayApp : ApplicationContext
 			case "request":
 				// It goes on the list, and pops up by the clock unless the window is what's being looked at
 				var looking = window is { IsDisposed: false, Visible: true } && window.WindowState != FormWindowState.Minimized && Form.ActiveForm == window;
-				requests.Add(message.Number("id"), message.Text("by"), message.Text("song"), DateTime.Now, seen: looking);
-				if(!looking) tray.ShowBalloonTip(5000, message.Text("by") == "" ? "Song request" : "Song request from " + Short(message.Text("by"), 40), Short(message.Text("song"), 200), ToolTipIcon.None);
+				if(requests.Add(message.Number("id"), message.Text("by"), message.Text("song"), DateTime.Now, seen: looking) == null) break;
+				// Coming back to a stream, the bot says again what's waiting. Those go on the list without a pop-up each.
+				var catchingUp = shownState != ClientState.Live || DateTime.UtcNow - wentLiveAt < TimeSpan.FromSeconds(3);
+				if(!looking && !catchingUp) tray.ShowBalloonTip(5000, message.Text("by") == "" ? "Song request" : "Song request from " + Short(message.Text("by"), 40), Short(message.Text("song"), 200), ToolTipIcon.None);
 				RequestsChanged();
 				break;
 			case "notify":

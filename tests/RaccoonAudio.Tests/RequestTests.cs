@@ -12,7 +12,7 @@ public class RequestListTests
 	public void RequestsWaitOldestFirstAndCountAsUnseenUntilLookedAt()
 	{
 		var list = new RequestList();
-		var first = list.Add(1001, " Bean ", " Mr. Brightside ", now);
+		var first = list.Add(1001, " Bean ", " Mr. Brightside ", now)!;
 		list.Add(1002, "Mo", "Africa", now.AddMinutes(1));
 		Assert.Equal(["Mr. Brightside", "Africa"], list.All.Select((r) => r.Song));
 		Assert.Equal("Bean", first.By);
@@ -28,7 +28,7 @@ public class RequestListTests
 	public void ADoneRequestComesOffAndTheBotIsToldAFewAtATime()
 	{
 		var list = new RequestList();
-		var requests = Enumerable.Range(1, 5).Select((i) => list.Add(2000 + i, "Bean", "Song " + i, now)).ToList();
+		var requests = Enumerable.Range(1, 5).Select((i) => list.Add(2000 + i, "Bean", "Song " + i, now)!).ToList();
 		Assert.True(list.Done(requests[1]));
 		Assert.True(list.Done(requests[3]));
 		Assert.True(list.Done(requests[0]));
@@ -56,12 +56,32 @@ public class RequestListTests
 	public void ClearingWhileLiveIsOneMessageSoNothingIsLeftToTell()
 	{
 		var list = new RequestList();
-		var first = list.Add(4001, "Bean", "Song", now);
+		var first = list.Add(4001, "Bean", "Song", now)!;
 		list.Add(4002, "Bean", "Another", now);
 		list.Done(first);
 		list.ClearTold();
 		Assert.Empty(list.All);
 		Assert.Equal(0, list.WaitingToTell);
+	}
+
+	[Fact]
+	public void ARequestTheBotSaysAgainIsNotAddedTwice()
+	{
+		var list = new RequestList();
+		var first = list.Add(5001, "Bean", "Song", now)!;
+		list.Add(5002, "Mo", "Another", now);
+		list.Seen();
+		// The app came back to the stream, and the bot says what's waiting
+		Assert.Null(list.Add(5001, "Bean", "Song", now));
+		Assert.Null(list.Add(5002, "Mo", "Another", now));
+		Assert.Equal(2, list.Count);
+		Assert.Equal(0, list.Unseen);
+		// One ticked off while the connection was down, so the bot still has it: it doesn't come back
+		list.Done(first);
+		Assert.Null(list.Add(5001, "Bean", "Song", now));
+		Assert.Equal(["Another"], list.All.Select((r) => r.Song));
+		// Once the bot has been told, it has no reason to say it again
+		Assert.Equal([5001L], list.NextToTell(5));
 	}
 
 	[Fact]

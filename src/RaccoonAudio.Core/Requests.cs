@@ -29,8 +29,11 @@ public sealed class RequestList
 	// How many finished requests the bot hasn't been told about yet
 	public int WaitingToTell => toTell.Count;
 
-	public SongRequest Add(long id, string by, string song, DateTime at, bool seen = false)
+	// Null if it's one the list already has, or has had ticked off and not yet told the bot about. The bot says
+	// again what's waiting whenever the app comes back to a stream, in case the app was restarted and has no list.
+	public SongRequest? Add(long id, string by, string song, DateTime at, bool seen = false)
 	{
+		if(waiting.Any((r) => r.Id == id) || toTell.Contains(id)) return null;
 		var request = new SongRequest(id, by.Trim(), song.Trim(), at);
 		waiting.Add(request);
 		if(waiting.Count > Most) waiting.RemoveAt(0);
