@@ -121,7 +121,9 @@ While you're live, people in the channel can use `/radio` in that channel's chat
   votes to skip**.
 - **Pause / resume**: the app presses pause or play in your music player.
 - **Requests**: each `/radio add` pops up by the clock and waits in the **Requests** list, which fills the right side
-  of the window (make the window bigger for a longer list; it scrolls past that). The same list is under
+  of the window (make the window bigger for a longer list; it scrolls past that). The arrow in the strip between the
+  two sides folds the list away, narrowing the window, and brings it back; folded, it shows how many are waiting, and
+  the app remembers which you picked. The same list is under
   **Requests** when you right-click the icon by the clock, and the icon gets a yellow mark while there are requests
   you haven't looked at.
   - **Open in Spotify** opens Spotify on a search for what they typed, or on the song itself if they sent a Spotify
