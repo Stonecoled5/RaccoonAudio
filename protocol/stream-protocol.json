@@ -1,5 +1,5 @@
 {
-	"version": 2,
+	"version": 3,
 	"path": "/stream",
 	"audio": { "codec": "opus", "sampleRate": 48000, "channels": 2, "frameMs": 20 },
 	"limits": {
@@ -24,7 +24,7 @@
 		"unpair": {}
 	},
 	"server": {
-		"welcome": { "v": "number" },
+		"welcome": { "v": "number", "name": "string" },
 		"paired": { "token": "string" },
 		"error": { "code": "string", "message": "string" },
 		"live": {},

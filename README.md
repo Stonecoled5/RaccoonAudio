@@ -1,6 +1,6 @@
 # Raccoon Audio
 
-A small Windows 11 app that plays your music in a Discord voice channel through raccoon man, the bot. You pick one
+A small Windows 11 app that plays your music in a Discord voice channel through Raccoon Man, the bot. You pick one
 program on your computer (Spotify, usually), press **Go live**, and everyone in the voice channel you're in hears it.
 They get `/radio` to see what's on, vote to skip, pause it, and ask you for songs.
 
@@ -16,13 +16,13 @@ Read this before you use it.
   says so and does nothing, rather than falling back to capturing everything.
 - **Only while you're live.** Capturing starts when a stream starts and stops the moment it ends, for any reason.
 - **It turns that program down on your computer while you're live**, unless you untick the box. Otherwise you'd hear
-  the music twice: once from the program and, a moment later, from raccoon man. It does this by dragging the
+  the music twice: once from the program and, a moment later, from Raccoon Man. It does this by dragging the
   program's slider in Windows' volume mixer almost to nothing (and turning up what it sends by the same amount, so
   the channel hears it at full volume). It puts the slider back when the stream ends, when the app closes, and, if
   the app was killed mid-stream, the next time it starts. It touches no other program's volume.
-- **It sends the title and artist of what's playing** (from Windows' own media controls), so raccoon man can show it
+- **It sends the title and artist of what's playing** (from Windows' own media controls), so Raccoon Man can show it
   and say a line about it in the voice channel's chat. Turn music tracking off in `/me` in Discord and he won't.
-- **Your sound and song titles go to raccoon man's server and nowhere else.** No analytics, no accounts, no logging
+- **Your sound and song titles go to Raccoon Man's server and nowhere else.** No analytics, no accounts, no logging
   in to Spotify or anything.
 - **It asks GitHub whether there's a newer version**, when it starts and about once a day while it's running. That
   is one request, to `https://api.github.com/repos/Stonecoled5/RaccoonAudio/releases/latest`, and all it carries is
@@ -96,7 +96,8 @@ what changed and build it yourself (below).
 
 1. In Discord, run `/me`, open **Audio app…** and press **Get a pairing code**. Only you can see it. It works once and
    runs out after ten minutes. Don't share it: whoever uses it can play audio as you.
-2. In the app, press **Pair with raccoon man** and type the six characters.
+2. In the app, press **Pair with Raccoon Man** and type the six characters.
+   (The bot can be renamed: the app uses whatever name he gives when it connects.)
 
 You can pair up to three computers. To unpair one, press **Unpair** under **Go live** in the app (it shows once a computer is paired): it
 comes off your list in `/me` too. (If the bot can't be reached right then, the app says so; finish in `/me` →
@@ -107,13 +108,13 @@ comes off your list in `/me` too. (If the bot can't be reached right then, the a
 1. Start your music player and pick it under **Program to stream** (press **Refresh** if it isn't listed; it has to
    have made a sound). The line under the list says whether that program is making sound right now.
 2. Join a voice channel in Discord.
-3. Press **Go live**. Raccoon man joins your channel and plays it.
+3. Press **Go live**. Raccoon Man joins your channel and plays it.
 4. Press **Stop** when you're done. Leaving the voice channel or closing the app ends it too, straight away, so
    someone else can stream.
 
 With **Don't play it on this computer while I'm live** ticked (it is to begin with), you hear the music through
-raccoon man like everyone else, about a second behind your player. Untick it to hear your player directly instead;
-then mute raccoon man for yourself in Discord (right-click him → **Mute**), or you'll hear it twice.
+Raccoon Man like everyone else, about a second behind your player. Untick it to hear your player directly instead;
+then mute Raccoon Man for yourself in Discord (right-click him → **Mute**), or you'll hear it twice.
 
 While you're live, people in the channel can use `/radio` in that channel's chat:
 
@@ -146,9 +147,9 @@ Only one person can stream in the server at a time.
 | "… is already streaming" | One stream at a time. Wait for theirs to end, or ask them to stop. |
 | "… isn't running" | Start the program you picked, or pick another. |
 | Your program isn't in the list | It only shows programs that have sound open. Play something, then **Refresh**. |
-| You hear the music twice | Tick **Don't play it on this computer while I'm live**, or mute raccoon man for yourself in Discord. |
+| You hear the music twice | Tick **Don't play it on this computer while I'm live**, or mute Raccoon Man for yourself in Discord. |
 | Your player is silent on your computer after a stream | It should come back the moment the stream ends. If the app was killed mid-stream, start it again and it puts the volume back. Failing that, open Windows' volume mixer and drag that program's slider back up. |
-| It says **Reconnecting…** now and then | Raccoon man restarts at least once a day. The app reconnects and carries on by itself within a few seconds. |
+| It says **Reconnecting…** now and then | Raccoon Man restarts at least once a day. The app reconnects and carries on by itself within a few seconds. |
 | No song titles | That program doesn't tell Windows what it's playing. The stream still works. |
 | Pause or skip doesn't do anything | Same reason: there's no pause or skip button for the app to press in that program. |
 | "The bot no longer knows this app" | It was unpaired in `/me`. Pair it again. |

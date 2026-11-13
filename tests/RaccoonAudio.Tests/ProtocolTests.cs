@@ -12,7 +12,7 @@ public class ProtocolTests
 	[Fact]
 	public void ItReadsEverythingFromTheBotsFile()
 	{
-		Assert.Equal(2, Protocol.Version);
+		Assert.Equal(3, Protocol.Version);
 		Assert.Equal("/stream", Protocol.Path);
 		Assert.Equal((48000, 2, 20), (Protocol.SampleRate, Protocol.Channels, Protocol.FrameMs));
 		Assert.Equal(960, Protocol.SamplesPerFrame);
@@ -59,7 +59,7 @@ public class ProtocolTests
 				Assert.Equal(kind, value.ValueKind switch { JsonValueKind.String => "string", JsonValueKind.Number => "number", _ => "boolean" });
 			}
 		}
-		Assert.Equal("{\"type\":\"hello\",\"v\":2,\"token\":\"key\"}", sent[0]);
+		Assert.Equal("{\"type\":\"hello\",\"v\":3,\"token\":\"key\"}", sent[0]);
 		Assert.Equal("{\"type\":\"live\"}", sent[2]);
 	}
 
@@ -106,7 +106,7 @@ public class ProtocolTests
 	{
 		var messages = new Dictionary<string, string>
 		{
-			["welcome"] = "{\"type\":\"welcome\",\"v\":1}",
+			["welcome"] = "{\"type\":\"welcome\",\"v\":3,\"name\":\"Raccoon Man\"}",
 			["paired"] = "{\"type\":\"paired\",\"token\":\"abc\"}",
 			["error"] = "{\"type\":\"error\",\"code\":\"busy\",\"message\":\"Try again.\"}",
 			["live"] = "{\"type\":\"live\"}",
@@ -121,7 +121,8 @@ public class ProtocolTests
 		Assert.Equal(Protocol.Server.Keys.Order(), messages.Keys.Order());
 		foreach(var (type, text) in messages) Assert.Equal(type, Protocol.ReadServer(text)?.Type);
 		Assert.Equal("Mr. Brightside", Protocol.ReadServer(messages["request"])!.Text("song"));
-		Assert.Equal(1, Protocol.ReadServer(messages["welcome"])!.Number("v"));
+		Assert.Equal(3, Protocol.ReadServer(messages["welcome"])!.Number("v"));
+		Assert.Equal("Raccoon Man", Protocol.ReadServer(messages["welcome"])!.Text("name"));
 		// A field it doesn't know is fine: a newer bot may add one
 		Assert.Equal("live", Protocol.ReadServer("{\"type\":\"live\",\"listeners\":3}")?.Type);
 	}

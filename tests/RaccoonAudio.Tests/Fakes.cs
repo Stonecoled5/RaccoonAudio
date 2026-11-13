@@ -110,7 +110,7 @@ sealed class Rig : IDisposable
 	{
 		var socket = await SocketAsync(number);
 		await Until("hello on connection " + number, () => socket.Types.Length >= 1);
-		socket.Say(new { type = "welcome", v = Protocol.Version });
+		socket.Say(new { type = "welcome", v = Protocol.Version, name = "Raccoon Man" });
 		await Until("being signed in", () => Client.State is ClientState.Connected or ClientState.Live || socket.Types.Contains("live"));
 		return socket;
 	}

@@ -23,7 +23,9 @@ sealed class MainForm : Form
 	readonly Label sound = new() { AutoSize = true, MaximumSize = new Size(420, 0), UseMnemonic = false };
 	readonly CheckBox quiet = new() { Text = "Don't play it on this computer while I'm live", AutoSize = true };
 	readonly AccentButton live = new() { Text = "Go live", Width = 420, Height = 48 };
-	readonly Button pair = new() { Text = "Pair with raccoon man", AutoSize = true };
+	// Says the bot's name, set in Render
+	readonly Button pair = new() { AutoSize = true };
+	readonly Label quietNote;
 	readonly RadioButton skipAuto = new() { Text = "Skip the song", AutoSize = true };
 	readonly RadioButton skipTell = new() { Text = "Just tell me", AutoSize = true };
 	readonly TextBox jam = new() { Width = 300, PlaceholderText = "https://spotify.link/…" };
@@ -70,9 +72,10 @@ sealed class MainForm : Form
 		page.Controls.Add(Note("Only this program's sound is sent, and only while you're live. Nothing else on your computer ever is."));
 		page.Controls.Add(Spacer());
 		page.Controls.Add(quiet);
-		page.Controls.Add(Note("You hear it through raccoon man like everyone else, instead of twice. While you're live the program is turned almost all the way down in Windows' volume mixer, and put back when you stop."));
+		quietNote = Note("");
+		page.Controls.Add(quietNote);
 		page.Controls.Add(Spacer());
-		// Not paired: Pair with raccoon man. Paired: Go live (or Stop), with Unpair under it
+		// Not paired: Pair with (his name). Paired: Go live (or Stop), with Unpair under it
 		page.Controls.Add(live);
 		page.Controls.Add(pair);
 		page.Controls.Add(unpair);
@@ -299,7 +302,7 @@ sealed class MainForm : Form
 
 	void AskForCode()
 	{
-		using var dialog = new PairForm();
+		using var dialog = new PairForm(app.BotName);
 		if(dialog.ShowDialog(this) == DialogResult.OK) app.Pair(dialog.Code);
 	}
 
@@ -321,11 +324,11 @@ sealed class MainForm : Form
 		status.ForeColor = isLive ? Theme.Live : Theme.Text;
 		word.Text = app.LastWord != "" ? app.LastWord : state switch
 		{
-			ClientState.NeedsPairing => "In Discord, run /me, open Audio app… and get a pairing code. Then press Pair with raccoon man.",
+			ClientState.NeedsPairing => "In Discord, run /me, open Audio app… and get a pairing code. Then press Pair with " + app.BotName + ".",
 			ClientState.Connected => "Join a voice channel in Discord, then press Go live.",
 			ClientState.Live => "Everyone in your voice channel hears " + app.Settings.Program + ". /radio in that channel's chat controls it.",
-			ClientState.Reconnecting => "Lost the connection to raccoon man. Trying again by itself.",
-			ClientState.NeedsUpdate => "This version is too old to talk to raccoon man. " + (app.Newer != null ? "Press Update to get version " + app.Newer.Version + "." : "Get the latest one from where you downloaded it."),
+			ClientState.Reconnecting => "Lost the connection to " + app.BotName + ". Trying again by itself.",
+			ClientState.NeedsUpdate => "This version is too old to talk to " + app.BotName + ". " + (app.Newer != null ? "Press Update to get version " + app.Newer.Version + "." : "Get the latest one from where you downloaded it."),
 			_ => ""
 		};
 		live.Text = isLive || app.WantsLive ? "Stop" : "Go live";
@@ -339,6 +342,8 @@ sealed class MainForm : Form
 		update.Enabled = !app.Updating;
 		version.Text = "Version " + TrayApp.Version;
 		checkForUpdate.Enabled = !app.Updating;
+		pair.Text = "Pair with " + app.BotName;
+		quietNote.Text = "You hear it through " + app.BotName + " like everyone else, instead of twice. While you're live the program is turned almost all the way down in Windows' volume mixer, and put back when you stop.";
 		live.Visible = app.HasKey;
 		pair.Visible = !app.HasKey;
 		unpair.Visible = app.HasKey;
@@ -359,9 +364,9 @@ sealed class PairForm : Form
 	readonly TextBox code = new() { Width = 160, MaxLength = 12, Font = new Font(FontFamily.GenericMonospace, 16), CharacterCasing = CharacterCasing.Upper, TextAlign = HorizontalAlignment.Center };
 	public string Code => code.Text;
 
-	public PairForm()
+	public PairForm(string botName)
 	{
-		Text = "Pair this computer";
+		Text = "Pair with " + botName;
 		Icon = Theme.AppIcon;
 		FormBorderStyle = FormBorderStyle.FixedDialog;
 		MaximizeBox = false;

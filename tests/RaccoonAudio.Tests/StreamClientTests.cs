@@ -46,7 +46,7 @@ public class StreamClientTests
 		Assert.Equal("ABC234", pair.GetProperty("code").GetString());
 		Assert.Equal("Den PC", pair.GetProperty("device").GetString());
 		socket.Say(new { type = "paired", token = "new-key" });
-		socket.Say(new { type = "welcome", v = Protocol.Version });
+		socket.Say(new { type = "welcome", v = Protocol.Version, name = "Raccoon Man" });
 		await Rig.Until("being signed in", () => rig.Client.State == ClientState.Connected);
 		Assert.Equal(["new-key"], rig.Keys);
 		Assert.True(rig.Client.HasKey);
@@ -294,6 +294,28 @@ public class StreamClientTests
 		socket.Say(new { type = "error", code = "unavailable", message = "Couldn't unpair this computer on the bot's side. Unpair it in /me instead." });
 		Assert.False(await unpairing);
 		Assert.True(rig.Client.HasKey);
+	}
+
+	[Fact]
+	public async Task TheBotsNameComesWithTheWelcomeAndIsOnlyAnnouncedWhenItChanges()
+	{
+		using var rig = new Rig();
+		var heard = new List<string>();
+		rig.Client.NameChanged += (name) => { lock(heard) heard.Add(name); };
+		Assert.Null(rig.Client.BotName);
+		rig.Client.Start();
+		var socket = await rig.SocketAsync(1);
+		await Rig.Until("hello", () => socket.Types.Length >= 1);
+		socket.Say(new { type = "welcome", v = Protocol.Version, name = "Captain Trash" });
+		await Rig.Until("being signed in", () => rig.Client.State == ClientState.Connected);
+		Assert.Equal("Captain Trash", rig.Client.BotName);
+		// Signing in again under the same name says nothing new
+		socket.Close();
+		var second = await rig.SocketAsync(2);
+		await Rig.Until("hello again", () => second.Types.Length >= 1);
+		second.Say(new { type = "welcome", v = Protocol.Version, name = "Captain Trash" });
+		await Rig.Until("signed in again", () => rig.Client.State == ClientState.Connected && rig.SocketCount == 2);
+		lock(heard) Assert.Equal(["Captain Trash"], heard);
 	}
 
 	[Theory]

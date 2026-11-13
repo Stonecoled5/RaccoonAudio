@@ -78,6 +78,17 @@ sealed class TrayApp : ApplicationContext
 	public bool Updating => updating;
 
 	public Settings Settings => settings;
+	// What the bot is called: as it said when the app last signed in, "Raccoon Man" before it ever has
+	public string BotName => string.IsNullOrWhiteSpace(settings.BotName) ? Core.StreamClient.DefaultBotName : settings.BotName;
+
+	// The bot was renamed (or said its name for the first time): remembered, and the window uses it at once
+	void OnNameChanged(string name)
+	{
+		if(name == settings.BotName) return;
+		settings.BotName = name;
+		settings.Save();
+		if(window != null && !window.IsDisposed) window.Render();
+	}
 	public ClientState State => client.State;
 	// The last thing worth telling the person, shown in the window
 	public string LastWord { get; private set; } = "";
@@ -101,6 +112,7 @@ sealed class TrayApp : ApplicationContext
 		client.Problem += (text) => ui.Post((_) => Tell(text, true), null);
 		client.Paired += (key) => ui.Post((_) => { Settings.SaveKey(key); Tell("This computer is paired. Join a voice channel and press Go live.", true); }, null);
 		client.KeyRejected += () => ui.Post((_) => Settings.ForgetKey(), null);
+		client.NameChanged += (name) => ui.Post((_) => OnNameChanged(name), null);
 		capture.Sound += (buffer, count) => framer.Push(buffer.AsSpan(0, count), client.SendAudio);
 		capture.Failed += (err) => ui.Post((_) => { client.StopLive(); Tell("Couldn't capture " + settings.Program + "'s sound, so the stream was stopped. " + err.Message, true); }, null);
 		media.Changed += (title, artist, playing) => client.SendNow(title, artist, playing);
@@ -862,7 +874,7 @@ sealed class TrayApp : ApplicationContext
 		var live = client.State == ClientState.Live;
 		if(!AudioPrograms.MakingSound(name, quietedFrom != null ? QuietLevel : 1)) return name + " is quiet right now." + (live ? " Nothing goes out until it plays." : "");
 		if(!live) return name + " is making sound right now.";
-		return quietedFrom != null ? name + " is playing. It's turned down on this computer while you're live, so you hear it through raccoon man." : name + " is playing, and going out to the voice channel.";
+		return quietedFrom != null ? name + " is playing. It's turned down on this computer while you're live, so you hear it through " + BotName + "." : name + " is playing, and going out to the voice channel.";
 	}
 
 	// Something to tell the person: kept for the window, and popped up by the clock if it matters when they're

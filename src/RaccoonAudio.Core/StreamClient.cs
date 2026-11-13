@@ -64,7 +64,12 @@ public sealed class StreamClient : IDisposable
 	// Set when a key or code arrives while it's waiting for one
 	TaskCompletionSource wake = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+	// What the bot is called until it says otherwise. It can be renamed, and says its name when the app signs in.
+	public const string DefaultBotName = "Raccoon Man";
+
 	public Uri Server { get; set; }
+	// The bot's name as it gave it when this app last signed in, or null before then
+	public string? BotName { get; private set; }
 	public ClientState State { get; private set; } = ClientState.Off;
 	public bool WantsLive => wantLive;
 
@@ -77,6 +82,8 @@ public sealed class StreamClient : IDisposable
 	public event Action<string>? Paired;
 	// The bot no longer knows this computer's key. The app should forget it.
 	public event Action? KeyRejected;
+	// The bot gave a name different from the one before (it was renamed, or this is the first sign-in)
+	public event Action<string>? NameChanged;
 
 	readonly record struct Outgoing(string? Text, ReadOnlyMemory<byte> Packet);
 
@@ -405,6 +412,12 @@ public sealed class StreamClient : IDisposable
 				return null;
 			case "welcome":
 				signedIn = true;
+				var name = message.Text("name").Trim();
+				if(name != "" && name != BotName)
+				{
+					BotName = name;
+					NameChanged?.Invoke(name);
+				}
 				lock(gate)
 				{
 					SetState(ClientState.Connected);
@@ -498,7 +511,7 @@ public sealed class StreamClient : IDisposable
 				// connection would bounce both forever, so this one stops.
 				lock(gate) wantLive = false;
 				SetState(ClientState.Off);
-				Problem?.Invoke("This computer connected to raccoon man from another copy of the app, so this one stopped.");
+				Problem?.Invoke("This computer connected to " + (BotName ?? DefaultBotName) + " from another copy of the app, so this one stopped.");
 				return After.Halt;
 			default:
 				// busy, timeout, too-fast, bad-message, or the bot's side failing: try again

@@ -30,6 +30,8 @@ sealed class Settings
 	// The newest release that's been announced with a pop-up by the clock, so each one pops up once and not every
 	// time the app starts
 	public string UpdateOffered { get; set; } = "";
+	// The bot's name as it last gave it, so the window can use it before connecting
+	public string BotName { get; set; } = Core.StreamClient.DefaultBotName;
 	// When the app starts and a newer version is out, install it then and there (unless it's live), instead of asking
 	public bool UpdateOnStartup { get; set; } = true;
 	// Whether the requests side of the window is open, or folded away so only the left side shows
