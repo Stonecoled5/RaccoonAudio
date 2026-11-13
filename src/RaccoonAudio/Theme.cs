@@ -426,6 +426,8 @@ sealed class DropList : Control
 	object? selected;
 	bool hovering;
 	ToolStripDropDown? menu;
+	// The list was just closed by pressing on this field: the click that follows mustn't open it again
+	bool closedByThisClick;
 
 	// About to open: the list can be brought up to date first
 	public event EventHandler? DropDown;
@@ -459,7 +461,15 @@ sealed class DropList : Control
 	protected override void OnMouseLeave(EventArgs e) { hovering = false; Invalidate(); base.OnMouseLeave(e); }
 	protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
 	protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
-	protected override void OnClick(EventArgs e) { Focus(); Open(); base.OnClick(e); }
+	protected override void OnClick(EventArgs e)
+	{
+		Focus();
+		// Pressing on the field while the list is open closes it (Windows closes a menu on any press outside it), and
+		// the click it ends in leaves it closed: the arrow opens and closes the list
+		if(closedByThisClick) closedByThisClick = false;
+		else Open();
+		base.OnClick(e);
+	}
 
 	protected override void OnKeyDown(KeyEventArgs e)
 	{
@@ -498,6 +508,10 @@ sealed class DropList : Control
 			menu.Items.Add(row);
 		}
 		menu.HandleCreated += (_, _) => Theme.RoundPopup(menu.Handle);
+		menu.Closing += (_, closing) =>
+		{
+			if(closing.CloseReason == ToolStripDropDownCloseReason.AppClicked && ClientRectangle.Contains(PointToClient(Cursor.Position))) closedByThisClick = true;
+		};
 		menu.Closed += (_, _) => Invalidate();
 		menu.Show(this, new Point(0, Height + 2));
 		Invalidate();

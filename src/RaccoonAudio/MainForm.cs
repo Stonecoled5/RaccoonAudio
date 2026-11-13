@@ -52,7 +52,7 @@ sealed class MainForm : Form
 		StartPosition = FormStartPosition.CenterScreen;
 
 		Icon = Theme.AppIcon;
-		var page = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false };
+		page = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false };
 		// The raccoon in headphones, with what the app is doing next to him
 		var face = new PictureBox { Image = Theme.Picture, SizeMode = PictureBoxSizeMode.Zoom, Size = new Size(64, 64), Margin = new Padding(0, 0, 10, 0) };
 		var title = new Label { Text = "Raccoon Audio", AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(3, 8, 3, 0) };
@@ -123,12 +123,12 @@ sealed class MainForm : Form
 		Controls.Add(columns);
 		// Tall enough for the left side once its text is filled in, without being taller than the screen
 		var room = (Screen.PrimaryScreen?.WorkingArea.Height ?? 800) - 80;
-		ClientSize = new Size(leftWidth + ToggleWidth + 380 + Padding.Horizontal, Math.Min(Math.Max(wanted.Height + 150, 600), room));
+		// As tall as the left side needs with Advanced closed; opening Advanced makes it taller (FitHeight)
+		ClientSize = new Size(leftWidth + ToggleWidth + 380 + Padding.Horizontal, Math.Min(page.GetPreferredSize(Size.Empty).Height + Padding.Vertical + 8, room));
 		requestsToggle.Click += (_, _) => app.SetRequestsOpen(!app.Settings.RequestsOpen);
 
 		refresh.Click += (_, _) => FillPrograms();
 		// Opening the list brings it up to date too
-		programs.DropDown += (_, _) => FillPrograms();
 		clearRequests.Click += (_, _) => app.ClearRequests();
 		// The rows are as wide as the list, so long requests wrap instead of running off the side
 		requestRows.ClientSizeChanged += (_, _) => FitRequests();
@@ -150,6 +150,7 @@ sealed class MainForm : Form
 		advanced.Click += (_, _) =>
 		{
 			advancedPanel.Visible = advanced.Open;
+			FitHeight();
 			if(advancedPanel.Visible) left.ScrollControlIntoView(advancedPanel);
 		};
 		startup.CheckedChanged += (_, _) => { if(!rendering) Settings.StartsWithWindows = startup.Checked; };
@@ -174,6 +175,19 @@ sealed class MainForm : Form
 	}
 
 	const int ToggleWidth = 24;
+	readonly FlowLayoutPanel page;
+
+	// The window's height follows the left side: taller while Advanced is open, shorter again when it closes, never
+	// taller than the screen (it scrolls past that), and moved up if growing would run it off the bottom
+	void FitHeight()
+	{
+		if(WindowState != FormWindowState.Normal) return;
+		var screen = Screen.FromControl(this).WorkingArea;
+		var frame = Height - ClientSize.Height;
+		var height = Math.Min(page.GetPreferredSize(Size.Empty).Height + Padding.Vertical + 8 + frame, screen.Height);
+		Height = height;
+		if(Bottom > screen.Bottom) Top = Math.Max(screen.Top, screen.Bottom - Height);
+	}
 	readonly int leftWidth;
 	readonly TableLayoutPanel columns;
 	readonly TableLayoutPanel right;
@@ -284,8 +298,8 @@ sealed class MainForm : Form
 		return row;
 	}
 
-	// The programs with sound open, with the remembered one picked even if it isn't running right now
-	const string NotRunning = "  (not running)";
+	// The programs with sound open, with the remembered one picked even if it isn't running right now. Only Refresh
+	// brings the list up to date; how the chosen program is doing is the line under the list, not part of its name.
 
 	void FillPrograms()
 	{
@@ -293,7 +307,7 @@ sealed class MainForm : Form
 		var found = AudioPrograms.Find();
 		var wanted = app.Settings.Program;
 		// The chosen one stays in the list when it has no sound open, saying why it isn't among the others
-		if(!found.Any((p) => string.Equals(p.Name, wanted, StringComparison.OrdinalIgnoreCase))) found.Insert(0, new AudioProgram(wanted, wanted + (AudioPrograms.ProcessFor(wanted) == null ? NotRunning : "  (no sound yet)"), 0, false));
+		if(!found.Any((p) => string.Equals(p.Name, wanted, StringComparison.OrdinalIgnoreCase))) found.Insert(0, new AudioProgram(wanted, wanted, 0, false));
 		programs.Items.Clear();
 		programs.Items.AddRange(found.Cast<object>());
 		programs.SelectedItem = found.First((p) => string.Equals(p.Name, wanted, StringComparison.OrdinalIgnoreCase));
@@ -310,8 +324,6 @@ sealed class MainForm : Form
 	public void ShowSound(string text)
 	{
 		if(sound.Text != text) sound.Text = text;
-		// The list still says the chosen program isn't running, and now it is: bring the list up to date
-		if(programs.SelectedItem is AudioProgram { ProcessId: 0 } chosen && chosen.Title.EndsWith(NotRunning) && !programs.DroppedDown && AudioPrograms.ProcessFor(chosen.Name) != null) FillPrograms();
 	}
 
 	// Brings the window in line with what the app is doing
