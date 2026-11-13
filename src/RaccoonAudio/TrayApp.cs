@@ -286,6 +286,8 @@ sealed class TrayApp : ApplicationContext
 	// Looks for a newer release: one request to GitHub that says nothing about the person or the computer. When the
 	// app does this by itself it says nothing unless there is one, and a look that fails is tried again in an hour.
 	// When the person asked, it says what it found either way.
+	static string UpToDate() => "You have the newest version (" + Version + ").";
+
 	public async Task CheckForUpdateAsync(bool asked)
 	{
 		if(checking || updating) return;
@@ -301,11 +303,14 @@ sealed class TrayApp : ApplicationContext
 			if(found == null)
 			{
 				Report("nothing newer than version " + Version);
-				if(asked) Tell("You have the newest version (" + Version + ").", false);
+				if(asked) Tell(UpToDate(), false);
 			}
 			else
 			{
 				Report("found version " + found.Version);
+				// An earlier "you have the newest version" isn't true any more: it would sit above the line saying a
+				// newer one is out
+				if(LastWord == UpToDate()) LastWord = "";
 				// Trying an update without anyone to click is handled below, with nothing put in front of anyone
 				if(startup.UpdateReport == null) action = UpdatePolicy.Decide(atStartup, settings.UpdateOnStartup, CanInstallNow, asked, settings.UpdateOffered == found.Tag);
 				if(action != UpdateAction.Nothing && settings.UpdateOffered != found.Tag)
