@@ -377,7 +377,7 @@ sealed class MainForm : Form
 		requestsTitle.Text = requests.Count == 0 ? "Requests" : "Requests (" + requests.Count + ")";
 		if(requestsToggle.Shown) ShowToggle();
 		clearRequests.Visible = requests.Count > 0;
-		if(requests.Count == 0) requestRows.Controls.Add(new Label { Text = "No requests yet. People in your voice channel ask for songs with /radio add, and they wait here until you tick them off.", AutoSize = true, ForeColor = Theme.Muted, Tag = "wrap" });
+		if(requests.Count == 0) requestRows.Controls.Add(new Label { Text = "No requests yet. People in your voice channel ask for songs with Ask for a song on /radio, and they wait here until you tick them off.", AutoSize = true, ForeColor = Theme.Muted, Tag = "wrap" });
 		foreach(var request in requests)
 		{
 			var song = new Label { Text = request.Song, AutoSize = true, UseMnemonic = false, Font = new Font(SystemFonts.MessageBoxFont!, FontStyle.Bold), Tag = "wrap", Margin = new Padding(3, 0, 3, 0) };
@@ -464,9 +464,9 @@ sealed class MainForm : Form
 		status.ForeColor = isLive ? Theme.Live : Theme.Text;
 		word.Text = app.LastWord != "" ? app.LastWord : state switch
 		{
-			ClientState.NeedsPairing => "In Discord, run /radio play and get a pairing code. Then press Pair with " + app.BotName + ".",
+			ClientState.NeedsPairing => "In Discord, run /radio, press Audio app, and get a pairing code. Then press Pair with " + app.BotName + ".",
 			ClientState.Connected => "Join a voice channel in Discord, then press Go live.",
-			ClientState.Live => "Everyone in your voice channel hears " + app.Settings.Program + ". /radio in that channel's chat controls it.",
+			ClientState.Live => "Everyone in your voice channel hears " + app.Settings.Program + ". Anyone there can use /radio to skip, pause or ask for songs.",
 			ClientState.Reconnecting => "Lost the connection to " + app.BotName + ". Trying again by itself.",
 			ClientState.NeedsUpdate => "This version is too old to talk to " + app.BotName + ". " + (app.Newer != null ? "Press Update to get version " + app.Newer.Version + "." : "Get the latest one from where you downloaded it."),
 			_ => ""
@@ -506,7 +506,7 @@ sealed class PairForm : RaccoonDialog
 
 	public PairForm(string botName)
 		: base("Pair with " + botName, "Pair with " + botName,
-			"In Discord, run /radio play and press Get a pairing code. Type the six characters here. The code works once and runs out after ten minutes.")
+			"In Discord, run /radio, press Audio app, then Get a pairing code. Type the six characters here. The code works once and runs out after ten minutes.")
 	{
 		Extra.Controls.Add(code);
 		var ok = Primary("Pair");

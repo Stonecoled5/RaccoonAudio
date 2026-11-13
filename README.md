@@ -2,7 +2,7 @@
 
 A small Windows 11 app that plays your music in a Discord voice channel through Raccoon Man, the bot. You pick one
 program on your computer (Spotify, usually), press **Go live**, and everyone in the voice channel you're in hears it.
-They get `/radio` to see what's on, vote to skip, pause it, and ask you for songs.
+They get `/radio`, a panel that shows what's on and has buttons to vote to skip, pause it, and ask you for songs.
 
 It sits by the clock as a coloured dot: grey when it's idle, green when it's connected, **red while it's live**.
 
@@ -94,14 +94,14 @@ what changed and build it yourself (below).
 
 ## Pairing your computer (once)
 
-1. In Discord, run `/radio play` and press **Get a pairing code**. Only you can see it. It works once and
+1. In Discord, run `/radio`, press **Audio app**, then **Get a pairing code**. Only you can see it. It works once and
    runs out after ten minutes. Don't share it: whoever uses it can play audio as you.
 2. In the app, press **Pair with Raccoon Man** and type the six characters.
    (The bot can be renamed: the app uses whatever name he gives when it connects.)
 
 You can pair up to three computers. To unpair one, press **Unpair** under **Go live** in the app (it shows once a computer is paired): it
-comes off your list in Discord too. (If the bot can't be reached right then, the app says so; finish with `/radio play`
-in Discord.) You can also unpair any of them from `/radio play`.
+comes off your list in Discord too. (If the bot can't be reached right then, the app says so; finish from `/radio` → **Audio app**
+in Discord.) You can also unpair any of them from `/radio` → **Audio app**.
 
 ## Playing music
 
@@ -116,12 +116,12 @@ With **Don't play it on this computer while I'm live** ticked (it is to begin wi
 Raccoon Man like everyone else, about a second behind your player. Untick it to hear your player directly instead;
 then mute Raccoon Man for yourself in Discord (right-click him → **Mute**), or you'll hear it twice.
 
-While you're live, people in the channel can use `/radio` in that channel's chat:
+While you're live, people in the channel can use the `/radio` panel (from any chat):
 
 - **Skip**: when a vote passes, the app either skips the song or just tells you. Choose which under **When the channel
   votes to skip**.
 - **Pause / resume**: the app presses pause or play in your music player.
-- **Requests**: each `/radio add` pops up by the clock and waits in the **Requests** list, which fills the right side
+- **Requests**: each song someone asks for on `/radio` pops up by the clock and waits in the **Requests** list, which fills the right side
   of the window (make the window bigger for a longer list; it scrolls past that). The arrow in the strip between the
   two sides folds the list away, narrowing the window, and brings it back; folded, it shows how many are waiting, and
   the app remembers which you picked. The same list is under
@@ -152,7 +152,7 @@ Only one person can stream in the server at a time.
 | It says **Reconnecting…** now and then | Raccoon Man restarts at least once a day. The app reconnects and carries on by itself within a few seconds. |
 | No song titles | That program doesn't tell Windows what it's playing. The stream still works. |
 | Pause or skip doesn't do anything | Same reason: there's no pause or skip button for the app to press in that program. |
-| "The bot no longer knows this app" | It was unpaired in Discord (`/radio play`). Pair it again. |
+| "The bot no longer knows this app" | It was unpaired in Discord (`/radio` → **Audio app**). Pair it again. |
 | "The app is older than the bot" | Press **Update** in the window, or right-click the icon by the clock. If there's no Update button (version 0.1.0 has none, or GitHub can't be reached), download the latest version from the Releases page and replace `RaccoonAudio.exe`. |
 | "Stop the stream first, then press Update" | Updating closes the app and opens the new version, which would end your stream. Press **Stop**, then **Update**. |
 | "Couldn't update. …" | The rest of the line says what went wrong: GitHub couldn't be reached, the download was cut off, it didn't match its checksum, the app's folder can't be written to, or the new version wouldn't start. Nothing was changed and you're still on the version you had. Try again later. If it says it can't write to its folder, move the app somewhere you can save files (Documents, say). Failing all that, update by hand: download the zip from the Releases page, close the app, and replace `RaccoonAudio.exe`. |

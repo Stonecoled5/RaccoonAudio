@@ -34,7 +34,7 @@ sealed class TrayApp : ApplicationContext
 	readonly Icon idleMarked = Dot(Color.FromArgb(140, 140, 140), true);
 	readonly Icon readyMarked = Dot(Color.FromArgb(70, 160, 90), true);
 	readonly Icon liveMarked = Dot(Color.FromArgb(220, 50, 50), true);
-	// The songs people have asked for with /radio add, until they're ticked off
+	// The songs people have asked for on /radio, until they're ticked off
 	readonly RequestList requests = new();
 	readonly ToolStripMenuItem requestsItem = new("Requests");
 	// How many requests the icon's menu lists before it just counts the rest
@@ -253,7 +253,7 @@ sealed class TrayApp : ApplicationContext
 			items.RemoveAt(0);
 			old.Dispose();
 		}
-		if(all.Count == 0) items.Add(new ToolStripMenuItem("None yet. People ask with /radio add.") { Enabled = false });
+		if(all.Count == 0) items.Add(new ToolStripMenuItem("None yet. People ask on /radio.") { Enabled = false });
 		foreach(var request in all.Take(MenuRequests))
 		{
 			var item = new ToolStripMenuItem(InMenu(Short(request.Song, 45) + "   (" + Short(request.By, 20) + ")")) { ToolTipText = "Open in Spotify" };
@@ -669,7 +669,7 @@ sealed class TrayApp : ApplicationContext
 		client.ForgetKey();
 		client.Start();
 		Tell(told ? "This computer is unpaired, here and in /me." :
-			"This computer's key is forgotten, but the bot couldn't be reached. To finish, unpair it in Discord with /radio play as well.", false);
+			"This computer's key is forgotten, but the bot couldn't be reached. To finish, unpair it in Discord too: /radio, then Audio app.", false);
 	}
 
 	public void ChooseProgram(string name)

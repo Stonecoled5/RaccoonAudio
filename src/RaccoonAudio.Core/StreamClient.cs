@@ -171,7 +171,7 @@ public sealed class StreamClient : IDisposable
 		return first == answer.Task && answer.Task.Result;
 	}
 
-	// Forgets this computer's key, here only. The bot's side is removed by UnpairAsync, or with /radio play in Discord.
+	// Forgets this computer's key, here only. The bot's side is removed by UnpairAsync, or from /radio's Audio app page in Discord.
 	public void ForgetKey()
 	{
 		lock(gate)

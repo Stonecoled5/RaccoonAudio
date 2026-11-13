@@ -2,7 +2,7 @@ using System.Text.RegularExpressions;
 
 namespace RaccoonAudio.Core;
 
-// A song someone in the voice channel asked for with /radio add. The id is the bot's: it's what the app names when
+// A song someone in the voice channel asked for on /radio. The id is the bot's: it's what the app names when
 // it tells the bot the request has been dealt with.
 public sealed record SongRequest(long Id, string By, string Song, DateTime At);
 
