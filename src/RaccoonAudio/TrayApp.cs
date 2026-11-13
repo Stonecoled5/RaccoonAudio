@@ -862,24 +862,26 @@ sealed class TrayApp : ApplicationContext
 		_ => "not connected"
 	};
 
-	// The icon by the clock: a coloured dot. Grey when idle, green when connected, red while live. Marked, it has a
-	// small yellow dot in the corner.
+	// The icon by the clock: the raccoon, with a coloured dot in the corner for what it's doing. Grey when idle, green
+	// when connected, red while live. Marked, it has a small yellow dot in the other corner.
 	static Icon Dot(Color colour, bool marked = false)
 	{
 		using var image = new Bitmap(32, 32);
 		using(var drawing = Graphics.FromImage(image))
 		{
 			drawing.SmoothingMode = SmoothingMode.AntiAlias;
+			drawing.InterpolationMode = InterpolationMode.HighQualityBicubic;
 			drawing.Clear(Color.Transparent);
+			drawing.DrawImage(Theme.Picture, 0, 0, 32, 32);
 			using var fill = new SolidBrush(colour);
-			drawing.FillEllipse(fill, 3, 3, 26, 26);
-			using var ring = new Pen(Color.FromArgb(40, 40, 40), 2);
-			drawing.DrawEllipse(ring, 3, 3, 26, 26);
+			using var ring = new Pen(Color.FromArgb(27, 28, 38), 2);
+			drawing.FillEllipse(fill, 19, 19, 12, 12);
+			drawing.DrawEllipse(ring, 19, 19, 12, 12);
 			if(marked)
 			{
 				using var mark = new SolidBrush(Color.FromArgb(255, 205, 40));
-				drawing.FillEllipse(mark, 17, 0, 15, 15);
-				drawing.DrawEllipse(ring, 17, 0, 14, 14);
+				drawing.FillEllipse(mark, 20, 0, 11, 11);
+				drawing.DrawEllipse(ring, 20, 0, 11, 11);
 			}
 		}
 		return Icon.FromHandle(image.GetHicon());

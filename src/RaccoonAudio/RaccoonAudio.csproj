@@ -15,8 +15,16 @@
     <Product>Raccoon Audio</Product>
     <Version>0.1.0</Version>
     <ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
+    <!-- The raccoon in headphones: the .exe's icon in Explorer and on the taskbar -->
+    <ApplicationIcon>raccoon.ico</ApplicationIcon>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The same raccoon for the window, the tray and the header, loaded from inside the app -->
+    <EmbeddedResource Include="raccoon.ico" LogicalName="raccoon.ico" />
+    <EmbeddedResource Include="raccoon.png" LogicalName="raccoon.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\RaccoonAudio.Core\RaccoonAudio.Core.csproj" />

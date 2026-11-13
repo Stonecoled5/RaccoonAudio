@@ -22,15 +22,16 @@ sealed class MainForm : Form
 	readonly Button refresh = new() { Text = "Refresh", AutoSize = true };
 	readonly Label sound = new() { AutoSize = true, MaximumSize = new Size(420, 0), UseMnemonic = false };
 	readonly CheckBox quiet = new() { Text = "Don't play it on this computer while I'm live", AutoSize = true };
-	readonly Button live = new() { Text = "Go live", Width = 420, Height = 44 };
+	readonly AccentButton live = new() { Text = "Go live", Width = 420, Height = 48 };
 	readonly Button pair = new() { Text = "Pair this computer…", AutoSize = true };
 	readonly RadioButton skipAuto = new() { Text = "Skip the song", AutoSize = true };
 	readonly RadioButton skipTell = new() { Text = "Just tell me", AutoSize = true };
 	readonly TextBox jam = new() { Width = 300, PlaceholderText = "https://spotify.link/…" };
 	readonly Button shareJam = new() { Text = "Share", AutoSize = true };
-	readonly CheckBox advanced = new() { Text = "Advanced", AutoSize = true };
+	// Opens and closes the advanced settings, with an arrow that says which it is
+	readonly Button advanced = new() { Text = Collapsed, AutoSize = true, TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0, 3, 3, 3), FlatAppearance = { BorderSize = 0 } };
 	readonly FlowLayoutPanel advancedPanel = new() { FlowDirection = FlowDirection.TopDown, AutoSize = true, Visible = false, WrapContents = false };
-	readonly TextBox server = new() { Width = 300 };
+	readonly TextBox server = new() { Width = 420 };
 	readonly Button applyServer = new() { Text = "Use this address", AutoSize = true };
 	readonly CheckBox startup = new() { Text = "Start with Windows (in the tray, not live)", AutoSize = true };
 	readonly Button unpair = new() { Text = "Unpair this computer", AutoSize = true };
@@ -46,8 +47,16 @@ sealed class MainForm : Form
 		Padding = new Padding(14);
 		StartPosition = FormStartPosition.CenterScreen;
 
+		Icon = Theme.AppIcon;
 		var page = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false };
-		page.Controls.Add(status);
+		// The raccoon in headphones, with what the app is doing next to him
+		var face = new PictureBox { Image = Theme.Picture, SizeMode = PictureBoxSizeMode.Zoom, Size = new Size(64, 64), Margin = new Padding(0, 0, 10, 0) };
+		var title = new Label { Text = "Raccoon Audio", AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(3, 8, 3, 0) };
+		var heading = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false, Margin = new Padding(0) };
+		heading.Controls.Add(title);
+		heading.Controls.Add(status);
+		page.Controls.Add(Row(face, heading));
+		page.Controls.Add(Spacer());
 		page.Controls.Add(word);
 		updateRow = Row(updateLine, update);
 		updateRow.Visible = false;
@@ -73,7 +82,9 @@ sealed class MainForm : Form
 		page.Controls.Add(Spacer());
 		page.Controls.Add(advanced);
 		advancedPanel.Controls.Add(Heading("Raccoon man's address"));
-		advancedPanel.Controls.Add(Row(server, applyServer));
+		// The button goes under the address, so the address can be as wide as everything else
+		advancedPanel.Controls.Add(server);
+		advancedPanel.Controls.Add(applyServer);
 		advancedPanel.Controls.Add(startup);
 		advancedPanel.Controls.Add(unpair);
 		advancedPanel.Controls.Add(Row(version, checkForUpdate));
@@ -89,7 +100,10 @@ sealed class MainForm : Form
 		right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 		right.Controls.Add(Row(requestsTitle, clearRequests), 0, 0);
 		right.Controls.Add(requestRows, 0, 1);
+		// Measured with the advanced settings open, so opening them never needs more room than the column has
+		advancedPanel.Visible = true;
 		var wanted = page.GetPreferredSize(Size.Empty);
+		advancedPanel.Visible = false;
 		var leftWidth = Math.Max(wanted.Width, 440) + SystemInformation.VerticalScrollBarWidth + 8;
 		var columns = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
 		columns.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, leftWidth));
@@ -123,7 +137,12 @@ sealed class MainForm : Form
 		{
 			if(!app.ShareJam(jam.Text)) MessageBox.Show(this, "That doesn't look like a Spotify Jam link. It's the one Spotify gives you when you start a Jam, starting with https://spotify.link/ or https://open.spotify.com/.", Text);
 		};
-		advanced.CheckedChanged += (_, _) => advancedPanel.Visible = advanced.Checked;
+		advanced.Click += (_, _) =>
+		{
+			advancedPanel.Visible = !advancedPanel.Visible;
+			advanced.Text = advancedPanel.Visible ? Expanded : Collapsed;
+			if(advancedPanel.Visible) left.ScrollControlIntoView(advancedPanel);
+		};
 		applyServer.Click += async (_, _) =>
 		{
 			if(!await app.SetServerAsync(server.Text)) MessageBox.Show(this, "That address won't work. It has to start with wss:// (or ws://127.0.0.1 for a copy running on this computer).", Text);
@@ -140,10 +159,15 @@ sealed class MainForm : Form
 			closing.Cancel = true;
 			Hide();
 		};
+		Theme.Apply(this);
+		HandleCreated += (_, _) => Theme.DarkTitleBar(this);
 		FillPrograms();
 		Render();
 		ShowRequests(app.Requests);
 	}
+
+	const string Collapsed = "▸  Advanced";
+	const string Expanded = "▾  Advanced";
 
 	// The songs people have asked for, oldest first, each with a way to find it in Spotify and to tick it off
 	public void ShowRequests(IReadOnlyList<SongRequest> requests)
@@ -158,7 +182,7 @@ sealed class MainForm : Form
 		}
 		requestsTitle.Text = requests.Count == 0 ? "Requests" : "Requests (" + requests.Count + ")";
 		clearRequests.Visible = requests.Count > 0;
-		if(requests.Count == 0) requestRows.Controls.Add(new Label { Text = "No requests yet. People in your voice channel ask for songs with /radio add, and they wait here until you tick them off.", AutoSize = true, ForeColor = SystemColors.GrayText, Tag = "wrap" });
+		if(requests.Count == 0) requestRows.Controls.Add(new Label { Text = "No requests yet. People in your voice channel ask for songs with /radio add, and they wait here until you tick them off.", AutoSize = true, ForeColor = Theme.Muted, Tag = "wrap" });
 		foreach(var request in requests)
 		{
 			var song = new Label { Text = request.Song, AutoSize = true, UseMnemonic = false, Font = new Font(SystemFonts.MessageBoxFont!, FontStyle.Bold), Tag = "wrap", Margin = new Padding(3, 0, 3, 0) };
@@ -167,10 +191,14 @@ sealed class MainForm : Form
 			var done = new Button { Text = "Done", AutoSize = true };
 			open.Click += (_, _) => app.OpenInSpotify(request);
 			done.Click += (_, _) => app.RequestDone(request);
-			var row = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = new Padding(0, 0, 0, 12) };
+			var row = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = new Padding(0, 0, 0, 10), Padding = new Padding(8) };
 			row.Controls.Add(song);
 			row.Controls.Add(who);
 			row.Controls.Add(Row(open, done));
+			Theme.Apply(row);
+			// Each request is a card, a shade lighter than the window
+			row.BackColor = Theme.Surface;
+			foreach(Control part in row.Controls) if(part is FlowLayoutPanel) part.BackColor = Theme.Surface;
 			requestRows.Controls.Add(row);
 		}
 		FitRequests();
@@ -181,7 +209,8 @@ sealed class MainForm : Form
 	// Wraps the text in the list of requests at the list's width
 	void FitRequests()
 	{
-		var width = Math.Max(requestRows.ClientSize.Width - 12, 120);
+		// Less the cards' own padding
+		var width = Math.Max(requestRows.ClientSize.Width - 30, 120);
 		foreach(Control row in requestRows.Controls)
 		{
 			if(Equals(row.Tag, "wrap")) row.MaximumSize = new Size(width, 0);
@@ -237,7 +266,7 @@ sealed class MainForm : Form
 		var state = app.State;
 		var isLive = state == ClientState.Live;
 		status.Text = isLive ? "🔴 LIVE in voice" : char.ToUpper(TrayApp.Describe(state)[0]) + TrayApp.Describe(state)[1..];
-		status.ForeColor = isLive ? Color.FromArgb(200, 40, 40) : SystemColors.ControlText;
+		status.ForeColor = isLive ? Theme.Live : Theme.Text;
 		word.Text = app.LastWord != "" ? app.LastWord : state switch
 		{
 			ClientState.NeedsPairing => "In Discord, run /me, open Audio app… and get a pairing code. Then press Pair this computer.",
@@ -248,6 +277,8 @@ sealed class MainForm : Form
 			_ => ""
 		};
 		live.Text = isLive || app.WantsLive ? "Stop" : "Go live";
+		live.Stopping = isLive || app.WantsLive;
+		live.Invalidate();
 		live.Enabled = state is ClientState.Connected or ClientState.Live or ClientState.Reconnecting && !app.Updating;
 		// A newer version: a line saying so and a button, and nothing happens until it's pressed
 		updateRow.Visible = app.Newer != null;
@@ -279,6 +310,7 @@ sealed class PairForm : Form
 	public PairForm()
 	{
 		Text = "Pair this computer";
+		Icon = Theme.AppIcon;
 		FormBorderStyle = FormBorderStyle.FixedDialog;
 		MaximizeBox = false;
 		MinimizeBox = false;
@@ -298,6 +330,8 @@ sealed class PairForm : Form
 		Controls.Add(page);
 		AcceptButton = ok;
 		CancelButton = cancel;
+		Theme.Apply(this);
+		HandleCreated += (_, _) => Theme.DarkTitleBar(this);
 		code.TextChanged += (_, _) => ok.Enabled = Protocol.LooksLikeCode(code.Text);
 		ok.Click += (_, _) => { DialogResult = DialogResult.OK; Close(); };
 	}
