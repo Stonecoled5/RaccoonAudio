@@ -126,6 +126,8 @@ sealed class MainForm : Form
 		// As tall as the left side needs with Advanced closed; opening Advanced makes it taller (FitHeight)
 		ClientSize = new Size(leftWidth + ToggleWidth + 380 + Padding.Horizontal, Math.Min(page.GetPreferredSize(Size.Empty).Height + Padding.Vertical + 8, room));
 		requestsToggle.Click += (_, _) => app.SetRequestsOpen(!app.Settings.RequestsOpen);
+		slide.Tick += (_, _) => SlideStep();
+		heightSlide.Tick += (_, _) => HeightStep();
 
 		refresh.Click += (_, _) => FillPrograms();
 		// Opening the list brings it up to date too
@@ -147,11 +149,16 @@ sealed class MainForm : Form
 			if(!app.ShareJam(jam.Text)) RaccoonDialog.Tell(this, "Spotify Jam link", "That isn't a Jam link", "It's the one Spotify gives you when you start a Jam, starting with https://spotify.link/ or https://open.spotify.com/.");
 		};
 		// The expander flips itself; the settings follow it
+		// Opening: the settings are there at once and the window grows down over them. Closing: the window shrinks
+		// up over them first, and then they're put away.
 		advanced.Click += (_, _) =>
 		{
-			advancedPanel.Visible = advanced.Open;
-			FitHeight();
-			if(advancedPanel.Visible) left.ScrollControlIntoView(advancedPanel);
+			if(advanced.Open)
+			{
+				advancedPanel.Visible = true;
+				FitHeight(() => left.ScrollControlIntoView(advancedPanel));
+			}
+			else FitHeight(() => advancedPanel.Visible = false, without: advancedPanel);
 		};
 		startup.CheckedChanged += (_, _) => { if(!rendering) Settings.StartsWithWindows = startup.Checked; };
 		updateOnStartup.CheckedChanged += (_, _) => { if(!rendering) app.SetUpdateOnStartup(updateOnStartup.Checked); };
@@ -172,6 +179,10 @@ sealed class MainForm : Form
 		Render();
 		ShowRequests(app.Requests);
 		ShowRequestsSide();
+		// Now its words are in, the window can be fitted to them; after that it follows the left side whenever that
+		// changes size (a message that's longer or shorter, the update line coming or going, Advanced opening)
+		FitHeight();
+		page.SizeChanged += (_, _) => { if(!heightSlide.Enabled) FitHeight(); };
 	}
 
 	const int ToggleWidth = 24;
@@ -179,14 +190,57 @@ sealed class MainForm : Form
 
 	// The window's height follows the left side: taller while Advanced is open, shorter again when it closes, never
 	// taller than the screen (it scrolls past that), and moved up if growing would run it off the bottom
-	void FitHeight()
+	// "without" is a part that's about to be put away: the height is worked out as if it already were.
+	void FitHeight(Action? then = null, Control? without = null)
 	{
-		if(WindowState != FormWindowState.Normal) return;
+		if(WindowState != FormWindowState.Normal)
+		{
+			then?.Invoke();
+			return;
+		}
 		var screen = Screen.FromControl(this).WorkingArea;
 		var frame = Height - ClientSize.Height;
-		var height = Math.Min(page.GetPreferredSize(Size.Empty).Height + Padding.Vertical + 8 + frame, screen.Height);
-		Height = height;
-		if(Bottom > screen.Bottom) Top = Math.Max(screen.Top, screen.Bottom - Height);
+		var content = page.GetPreferredSize(Size.Empty).Height;
+		if(without is { Visible: true }) content -= without.Height + without.Margin.Vertical;
+		var height = Math.Min(content + Padding.Vertical + 8 + frame, screen.Height);
+		// Growing past the bottom of the screen: it moves up first, so the slide stays on screen
+		if(Top + height > screen.Bottom) Top = Math.Max(screen.Top, screen.Bottom - height);
+		SlideHeight(height, then ?? (() => { }));
+	}
+
+	readonly System.Windows.Forms.Timer heightSlide = new() { Interval = 15 };
+	int heightFrom, heightTo;
+	DateTime heightStart;
+	Action? heightDone;
+
+	// Like SlideWidth, for the window's height
+	void SlideHeight(int to, Action done)
+	{
+		heightSlide.Stop();
+		heightDone = null;
+		if(!Visible || Height == to)
+		{
+			Height = to;
+			done();
+			return;
+		}
+		heightFrom = Height;
+		heightTo = to;
+		heightStart = DateTime.UtcNow;
+		heightDone = done;
+		heightSlide.Start();
+	}
+
+	void HeightStep()
+	{
+		var t = Math.Min(1, (DateTime.UtcNow - heightStart).TotalMilliseconds / SlideMs);
+		var eased = 1 - Math.Pow(1 - t, 3);
+		Height = heightFrom + (int)Math.Round((heightTo - heightFrom) * eased);
+		if(t < 1) return;
+		heightSlide.Stop();
+		var done = heightDone;
+		heightDone = null;
+		done?.Invoke();
 	}
 	readonly int leftWidth;
 	readonly TableLayoutPanel columns;
@@ -199,30 +253,79 @@ sealed class MainForm : Form
 	public void ShowRequestsSide()
 	{
 		var open = app.Settings.RequestsOpen;
-		if(open != right.Visible || !requestsToggle.Shown)
+		// The first time (as the window is made) it's just set; after that the window slides to its new width
+		var first = sideOpen == null;
+		if(open != sideOpen)
 		{
-			SuspendLayout();
+			sideOpen = open;
 			var frame = Width - ClientSize.Width;
+			var folded = leftWidth + ToggleWidth + Padding.Horizontal + frame;
 			if(open)
 			{
+				// The requests are there from the start, and the window widens to show them
 				columns.ColumnStyles[0] = new ColumnStyle(SizeType.Absolute, leftWidth);
 				columns.ColumnStyles[2] = new ColumnStyle(SizeType.Percent, 100);
 				right.Visible = true;
-				MinimumSize = new Size(leftWidth + ToggleWidth + 300 + Padding.Horizontal + frame, 420);
-				if(Width < MinimumSize.Width + 80) Width = leftWidth + ToggleWidth + requestsWidth + Padding.Horizontal + frame;
+				MinimumSize = new Size(folded, 420);
+				var opened = new Size(leftWidth + ToggleWidth + 300 + Padding.Horizontal + frame, 420);
+				var to = first && Width >= opened.Width + 80 ? Width : leftWidth + ToggleWidth + requestsWidth + Padding.Horizontal + frame;
+				SlideWidth(to, first, () => MinimumSize = opened);
 			}
 			else
 			{
-				if(right.Visible && right.Width > 0) requestsWidth = right.Width;
-				right.Visible = false;
-				columns.ColumnStyles[0] = new ColumnStyle(SizeType.Percent, 100);
-				columns.ColumnStyles[2] = new ColumnStyle(SizeType.Absolute, 0);
-				MinimumSize = new Size(leftWidth + ToggleWidth + Padding.Horizontal + frame, 420);
-				Width = MinimumSize.Width;
+				// The window narrows over the requests, and only then are they put away
+				// Its width is kept for next time, unless it was still sliding open
+				if(right.Visible && right.Width > 0 && !slide.Enabled) requestsWidth = right.Width;
+				MinimumSize = new Size(folded, 420);
+				SlideWidth(folded, first, () =>
+				{
+					right.Visible = false;
+					columns.ColumnStyles[0] = new ColumnStyle(SizeType.Percent, 100);
+					columns.ColumnStyles[2] = new ColumnStyle(SizeType.Absolute, 0);
+				});
 			}
-			ResumeLayout();
 		}
 		ShowToggle();
+	}
+
+	// Whether the requests side is open, or on its way open (null until it's first set)
+	bool? sideOpen;
+	// How long the window takes to widen or narrow
+	const int SlideMs = 220;
+	readonly System.Windows.Forms.Timer slide = new() { Interval = 15 };
+	int slideFrom, slideTo;
+	DateTime slideStart;
+	Action? slideDone;
+
+	// Moves the window's width to this, quickly at first and slowing as it arrives, then does what's left. A new slide
+	// takes over from one still going, from wherever it got to.
+	void SlideWidth(int to, bool now, Action done)
+	{
+		slide.Stop();
+		slideDone = null;
+		if(now || !Visible || WindowState != FormWindowState.Normal || Width == to)
+		{
+			Width = to;
+			done();
+			return;
+		}
+		slideFrom = Width;
+		slideTo = to;
+		slideStart = DateTime.UtcNow;
+		slideDone = done;
+		slide.Start();
+	}
+
+	void SlideStep()
+	{
+		var t = Math.Min(1, (DateTime.UtcNow - slideStart).TotalMilliseconds / SlideMs);
+		var eased = 1 - Math.Pow(1 - t, 3);
+		Width = slideFrom + (int)Math.Round((slideTo - slideFrom) * eased);
+		if(t < 1) return;
+		slide.Stop();
+		var done = slideDone;
+		slideDone = null;
+		done?.Invoke();
 	}
 
 	// The arrow points where the requests go (open) or come from (folded), and folded it says how many are waiting
