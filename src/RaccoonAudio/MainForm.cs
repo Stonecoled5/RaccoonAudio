@@ -97,7 +97,7 @@ sealed class MainForm : Form
 
 		// The left side keeps its own width and scrolls if the window is shorter than it; the right side takes
 		// whatever room is left, so making the window bigger makes the list of requests bigger
-		var left = new Panel { AutoScroll = true, Dock = DockStyle.Fill };
+		left = new Panel { AutoScroll = true, Dock = DockStyle.Fill };
 		left.Controls.Add(page);
 		var right = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Padding(14, 0, 0, 0) };
 		right.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -156,7 +156,10 @@ sealed class MainForm : Form
 			if(advanced.Open)
 			{
 				advancedPanel.Visible = true;
-				FitHeight(() => left.ScrollControlIntoView(advancedPanel));
+				FitHeight(() =>
+				{
+					if(page.GetPreferredSize(Size.Empty).Height > left.ClientSize.Height) left.ScrollControlIntoView(advancedPanel);
+				});
 			}
 			else FitHeight(() => advancedPanel.Visible = false, without: advancedPanel);
 		};
@@ -187,6 +190,24 @@ sealed class MainForm : Form
 
 	const int ToggleWidth = 24;
 	readonly FlowLayoutPanel page;
+	// The left side, which scrolls only when the window can't be as tall as it is
+	readonly Panel left;
+
+	// While the window slides, nothing scrolls: the sides are briefly bigger than the window, and a scroll bar would
+	// flash up, or the left side would scroll its top out of sight. After, the left side scrolls only if it still
+	// doesn't fit (a small screen), and starts from the top.
+	void HoldScrolling()
+	{
+		left.AutoScroll = false;
+		requestRows.AutoScroll = false;
+	}
+
+	void ReleaseScrolling()
+	{
+		requestRows.AutoScroll = true;
+		left.AutoScroll = true;
+		if(page.GetPreferredSize(Size.Empty).Height <= left.ClientSize.Height) left.AutoScrollPosition = Point.Empty;
+	}
 
 	// The window's height follows the left side: taller while Advanced is open, shorter again when it closes, never
 	// taller than the screen (it scrolls past that), and moved up if growing would run it off the bottom
@@ -228,6 +249,7 @@ sealed class MainForm : Form
 		heightTo = to;
 		heightStart = DateTime.UtcNow;
 		heightDone = done;
+		HoldScrolling();
 		heightSlide.Start();
 	}
 
@@ -241,6 +263,7 @@ sealed class MainForm : Form
 		var done = heightDone;
 		heightDone = null;
 		done?.Invoke();
+		ReleaseScrolling();
 	}
 	readonly int leftWidth;
 	readonly TableLayoutPanel columns;
@@ -313,6 +336,7 @@ sealed class MainForm : Form
 		slideTo = to;
 		slideStart = DateTime.UtcNow;
 		slideDone = done;
+		HoldScrolling();
 		slide.Start();
 	}
 
@@ -326,6 +350,7 @@ sealed class MainForm : Form
 		var done = slideDone;
 		slideDone = null;
 		done?.Invoke();
+		ReleaseScrolling();
 	}
 
 	// The arrow points where the requests go (open) or come from (folded), and folded it says how many are waiting
