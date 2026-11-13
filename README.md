@@ -91,8 +91,9 @@ what changed and build it yourself (below).
    runs out after ten minutes. Don't share it: whoever uses it can play audio as you.
 2. In the app, press **Pair this computer…** and type the six characters.
 
-You can pair up to three computers. To unpair one, use `/me` → **Audio app…** in Discord, and **Unpair this
-computer** under **Advanced** in the app.
+You can pair up to three computers. To unpair one, press **Unpair this computer** under **Advanced** in the app: it
+comes off your list in `/me` too. (If the bot can't be reached right then, the app says so; finish in `/me` →
+**Audio app…** in Discord.) You can also unpair any of them from `/me`.
 
 ## Playing music
 

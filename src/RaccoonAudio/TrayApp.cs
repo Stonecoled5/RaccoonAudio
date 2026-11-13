@@ -589,15 +589,18 @@ sealed class TrayApp : ApplicationContext
 		Refresh();
 	}
 
-	// Forgets this computer's key here. It stays listed in /me until it's unpaired there too.
+	// Unpairs this computer: the bot is asked to forget it (so it comes off the list in /me), then its key is forgotten
+	// here. If the bot can't be reached, the key is still forgotten here, and the person is told to finish in /me.
 	public async Task UnpairAsync()
 	{
+		var told = await client.UnpairAsync(TimeSpan.FromSeconds(5));
 		await client.StopAsync();
 		StopCapture();
 		Settings.ForgetKey();
 		client.ForgetKey();
 		client.Start();
-		Tell("This computer's key is forgotten. To finish, unpair it in /me → Audio app in Discord as well.", false);
+		Tell(told ? "This computer is unpaired, here and in /me." :
+			"This computer's key is forgotten, but the bot couldn't be reached. To finish, unpair it in /me → Audio app in Discord as well.", false);
 	}
 
 	public void ChooseProgram(string name)

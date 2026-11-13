@@ -20,7 +20,8 @@
 		"now": { "title": "string", "artist": "string", "playing": "boolean" },
 		"jam": { "url": "string" },
 		"done": { "id": "number" },
-		"clear": {}
+		"clear": {},
+		"unpair": {}
 	},
 	"server": {
 		"welcome": { "v": "number" },
@@ -32,7 +33,8 @@
 		"resume": {},
 		"skip": {},
 		"request": { "id": "number", "by": "string", "song": "string" },
-		"notify": { "text": "string" }
+		"notify": { "text": "string" },
+		"unpaired": {}
 	},
 	"errors": {
 		"update": "The app is older than the bot. It has to be updated before it can connect.",

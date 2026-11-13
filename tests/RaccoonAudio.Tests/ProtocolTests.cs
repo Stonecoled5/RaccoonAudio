@@ -17,8 +17,8 @@ public class ProtocolTests
 		Assert.Equal((48000, 2, 20), (Protocol.SampleRate, Protocol.Channels, Protocol.FrameMs));
 		Assert.Equal(960, Protocol.SamplesPerFrame);
 		Assert.True(Protocol.MaxAudioFrameBytes >= 1275, "room for the biggest Opus packet");
-		Assert.Equal(["clear", "done", "hello", "jam", "live", "now", "pair", "stop"], Protocol.Client.Keys.Order());
-		Assert.Equal(["ended", "error", "live", "notify", "paired", "pause", "request", "resume", "skip", "welcome"], Protocol.Server.Keys.Order());
+		Assert.Equal(["clear", "done", "hello", "jam", "live", "now", "pair", "stop", "unpair"], Protocol.Client.Keys.Order());
+		Assert.Equal(["ended", "error", "live", "notify", "paired", "pause", "request", "resume", "skip", "unpaired", "welcome"], Protocol.Server.Keys.Order());
 		foreach(var code in new[] { "update", "bad-token", "bad-code", "too-many-devices", "too-many-tries", "replaced", "unavailable", "busy" }) Assert.Contains(code, Protocol.Errors.Keys);
 	}
 
@@ -46,7 +46,7 @@ public class ProtocolTests
 	[Fact]
 	public void EveryMessageItSendsIsExactlyOneTheProtocolLists()
 	{
-		var sent = new[] { Protocol.Hello("key"), Protocol.Pair("abc-234", "Den PC"), Protocol.Live(), Protocol.Stop(), Protocol.Now("Song", "Band", true), Protocol.Jam("https://spotify.link/x"), Protocol.Done(7), Protocol.Clear() };
+		var sent = new[] { Protocol.Hello("key"), Protocol.Pair("abc-234", "Den PC"), Protocol.Live(), Protocol.Stop(), Protocol.Now("Song", "Band", true), Protocol.Jam("https://spotify.link/x"), Protocol.Done(7), Protocol.Clear(), Protocol.Unpair() };
 		Assert.Equal(Protocol.Client.Keys.Order(), sent.Select((m) => Json(m).GetProperty("type").GetString()!).Order());
 		foreach(var message in sent)
 		{
@@ -115,7 +115,8 @@ public class ProtocolTests
 			["resume"] = "{\"type\":\"resume\"}",
 			["skip"] = "{\"type\":\"skip\"}",
 			["request"] = "{\"type\":\"request\",\"id\":7,\"by\":\"Bean\",\"song\":\"Mr. Brightside\"}",
-			["notify"] = "{\"type\":\"notify\",\"text\":\"Paused for a summon.\"}"
+			["notify"] = "{\"type\":\"notify\",\"text\":\"Paused for a summon.\"}",
+			["unpaired"] = "{\"type\":\"unpaired\"}"
 		};
 		Assert.Equal(Protocol.Server.Keys.Order(), messages.Keys.Order());
 		foreach(var (type, text) in messages) Assert.Equal(type, Protocol.ReadServer(text)?.Type);

@@ -131,7 +131,7 @@ sealed class MainForm : Form
 		startup.CheckedChanged += (_, _) => { if(!rendering) Settings.StartsWithWindows = startup.Checked; };
 		unpair.Click += async (_, _) =>
 		{
-			if(MessageBox.Show(this, "Forget this computer's key? You'll need a new pairing code to use it again.", Text, MessageBoxButtons.OKCancel) == DialogResult.OK) await app.UnpairAsync();
+			if(MessageBox.Show(this, "Unpair this computer? It comes off your list in /me too, and you'll need a new pairing code to use it again.", Text, MessageBoxButtons.OKCancel) == DialogResult.OK) await app.UnpairAsync();
 		};
 		// Closing the window leaves it running by the clock. Exit is in the icon's menu.
 		FormClosing += (_, closing) =>

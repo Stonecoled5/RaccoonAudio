@@ -116,6 +116,8 @@ public static class Protocol
 	// The streamer has dealt with a song request, or with all of them
 	public static string Done(long id) => Build("done", ("id", id));
 	public static string Clear() => Build("clear");
+	// This computer is being unpaired: the bot forgets it, so it comes off the list in /me too
+	public static string Unpair() => Build("unpair");
 
 	// A pairing code as someone typed it: upper case, without the spaces or dashes people add
 	public static string TidyCode(string typed) => new string(typed.Where((c) => !char.IsWhiteSpace(c) && c != '-').ToArray()).ToUpperInvariant();

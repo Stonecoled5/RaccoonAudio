@@ -59,6 +59,8 @@ public sealed class StreamClient : IDisposable
 	int resumeTries;
 	// Counts connections, so something scheduled on one never acts on the next
 	int connection;
+	// Waiting for the bot to confirm an unpair: true once it has, false if it said no
+	TaskCompletionSource<bool>? unpairing;
 	// Set when a key or code arrives while it's waiting for one
 	TaskCompletionSource wake = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -141,7 +143,28 @@ public sealed class StreamClient : IDisposable
 		Start();
 	}
 
-	// Forgets this computer's key, here only. The bot's side is removed in /me.
+	// Asks the bot to forget this computer, so it comes off the list in /me as well. True once the bot confirms (the
+	// key is forgotten here too, and it goes back to waiting for a pairing code); false if it isn't connected or doesn't
+	// answer in time, in which case only /me can remove it from the bot's side.
+	public async Task<bool> UnpairAsync(TimeSpan timeout)
+	{
+		TaskCompletionSource<bool> answer;
+		lock(gate)
+		{
+			if(State != ClientState.Connected && State != ClientState.Live) return false;
+			answer = unpairing = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+			SendText(Protocol.Unpair());
+		}
+		using var giveUp = new CancellationTokenSource();
+		// A real clock, not the retry waits (which tests make instant)
+		var timer = Task.Delay(timeout, giveUp.Token);
+		var first = await Task.WhenAny(answer.Task, timer);
+		giveUp.Cancel();
+		lock(gate) if(unpairing == answer) unpairing = null;
+		return first == answer.Task && answer.Task.Result;
+	}
+
+	// Forgets this computer's key, here only. The bot's side is removed by UnpairAsync, or in /me.
 	public void ForgetKey()
 	{
 		lock(gate)
@@ -407,7 +430,17 @@ public sealed class StreamClient : IDisposable
 				SetState(ClientState.Connected);
 				Said?.Invoke(message);
 				return null;
+			case "unpaired":
+				// The bot has forgotten this computer: so does the app, and it goes back to asking for a code
+				lock(gate)
+				{
+					token = null;
+					wantLive = false;
+					unpairing?.TrySetResult(true);
+				}
+				return After.Stay;
 			case "error":
+				lock(gate) unpairing?.TrySetResult(false);
 				return HandleError(message.Text("code"), message.Text("message"), signedIn);
 			default:
 				Said?.Invoke(message);

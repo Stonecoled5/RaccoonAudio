@@ -260,6 +260,42 @@ public class StreamClientTests
 		Assert.Equal(1, rig.SocketCount);
 	}
 
+	[Fact]
+	public async Task UnpairingAsksTheBotAndForgetsTheKeyOnceItConfirms()
+	{
+		using var rig = new Rig();
+		rig.Client.Start();
+		var socket = await rig.SignedInAsync(1);
+		var unpairing = rig.Client.UnpairAsync(TimeSpan.FromSeconds(10));
+		await Rig.Until("the unpair to go out", () => socket.Types.Contains("unpair"));
+		socket.Say(new { type = "unpaired" });
+		socket.Close();
+		Assert.True(await unpairing);
+		await Rig.Until("it to ask for pairing", () => rig.Client.State == ClientState.NeedsPairing);
+		Assert.False(rig.Client.HasKey);
+		Assert.False(rig.Client.WantsLive);
+	}
+
+	[Fact]
+	public async Task UnpairingWhileNotConnectedSaysTheBotWasNotTold()
+	{
+		using var rig = new Rig(token: null);
+		Assert.False(await rig.Client.UnpairAsync(TimeSpan.FromSeconds(1)));
+	}
+
+	[Fact]
+	public async Task AnUnpairTheBotRefusesIsNotConfirmed()
+	{
+		using var rig = new Rig();
+		rig.Client.Start();
+		var socket = await rig.SignedInAsync(1);
+		var unpairing = rig.Client.UnpairAsync(TimeSpan.FromSeconds(10));
+		await Rig.Until("the unpair to go out", () => socket.Types.Contains("unpair"));
+		socket.Say(new { type = "error", code = "unavailable", message = "Couldn't unpair this computer on the bot's side. Unpair it in /me instead." });
+		Assert.False(await unpairing);
+		Assert.True(rig.Client.HasKey);
+	}
+
 	[Theory]
 	[InlineData("bad-code")]
 	[InlineData("too-many-devices")]
