@@ -64,7 +64,15 @@ While you're live, people in the channel can use `/radio` in that channel's chat
 - **Skip**: when a vote passes, the app either skips the song or just tells you. Choose which under **When the channel
   votes to skip**.
 - **Pause / resume**: the app presses pause or play in your music player.
-- **Requests**: `/radio add` pops up here with who asked and for what. Playing it is up to you.
+- **Requests**: each `/radio add` pops up by the clock and waits in the **Requests** list, which fills the right side
+  of the window (make the window bigger for a longer list; it scrolls past that). The same list is under
+  **Requests** when you right-click the icon by the clock, and the icon gets a yellow mark while there are requests
+  you haven't looked at.
+  - **Open in Spotify** opens Spotify on a search for what they typed, or on the song itself if they sent a Spotify
+    link. Nothing is looked up anywhere: adding it to your queue is yours to do in Spotify.
+  - **Done** takes a request off the list, played or not. Each person can have 20 requests waiting with you, and
+    ticking one of theirs off is what gives them room for another. **Clear all** empties the list.
+  - The list is kept until you tick things off or close the app. A new stream starts everyone's count from nothing.
 - **Spotify Jam**: paste your Jam link and press **Share**, and he posts it so people can add songs from their own
   Spotify. Hosting a Jam needs Spotify Premium, and joining one from elsewhere probably does too.
 
@@ -124,8 +132,9 @@ These are for development. None of them touches your saved key.
   meanwhile, the way a stream does, and check what's captured is still at full volume.
 - `RaccoonAudio.exe --profile <folder>`: the real app, keeping its settings and key in that folder instead of the
   usual place, and able to run beside your ordinary copy. For trying things without touching your own pairing.
-- `node scripts/local-server.mjs <path to RaccoonBot> [port]`: runs the bot's real stream server on this computer
-  with a stand-in for voice, and prints an address and a pairing code. Then
+- `node scripts/local-server.mjs <path to RaccoonBot> [port] [requests]`: runs the bot's real stream server on this
+  computer with a stand-in for voice, and prints an address and a pairing code. With a number of requests, it sends
+  that many made-up song requests once the app goes live, and says when they're ticked off. Then
   `RaccoonAudio.exe --connect-test <address> <code> <seconds> report.txt` pairs, signs in, goes live, streams a test
   tone and stops. To try the real app against it, start it with `--profile` and put the address under **Advanced**.
 

@@ -202,6 +202,23 @@ public sealed class StreamClient : IDisposable
 		return true;
 	}
 
+	// A song request has been dealt with, while live. False if it couldn't be said right now (not live): the bot only
+	// keeps requests for the stream that's on, so it's said again later or not at all.
+	public bool SendDone(long id)
+	{
+		if(State != ClientState.Live) return false;
+		SendText(Protocol.Done(id));
+		return true;
+	}
+
+	// Every song request has been dealt with, while live
+	public bool SendClear()
+	{
+		if(State != ClientState.Live) return false;
+		SendText(Protocol.Clear());
+		return true;
+	}
+
 	void AskLive()
 	{
 		askedLive = true;

@@ -12,12 +12,12 @@ public class ProtocolTests
 	[Fact]
 	public void ItReadsEverythingFromTheBotsFile()
 	{
-		Assert.Equal(1, Protocol.Version);
+		Assert.Equal(2, Protocol.Version);
 		Assert.Equal("/stream", Protocol.Path);
 		Assert.Equal((48000, 2, 20), (Protocol.SampleRate, Protocol.Channels, Protocol.FrameMs));
 		Assert.Equal(960, Protocol.SamplesPerFrame);
 		Assert.True(Protocol.MaxAudioFrameBytes >= 1275, "room for the biggest Opus packet");
-		Assert.Equal(["hello", "jam", "live", "now", "pair", "stop"], Protocol.Client.Keys.Order());
+		Assert.Equal(["clear", "done", "hello", "jam", "live", "now", "pair", "stop"], Protocol.Client.Keys.Order());
 		Assert.Equal(["ended", "error", "live", "notify", "paired", "pause", "request", "resume", "skip", "welcome"], Protocol.Server.Keys.Order());
 		foreach(var code in new[] { "update", "bad-token", "bad-code", "too-many-devices", "too-many-tries", "replaced", "unavailable", "busy" }) Assert.Contains(code, Protocol.Errors.Keys);
 	}
@@ -46,7 +46,7 @@ public class ProtocolTests
 	[Fact]
 	public void EveryMessageItSendsIsExactlyOneTheProtocolLists()
 	{
-		var sent = new[] { Protocol.Hello("key"), Protocol.Pair("abc-234", "Den PC"), Protocol.Live(), Protocol.Stop(), Protocol.Now("Song", "Band", true), Protocol.Jam("https://spotify.link/x") };
+		var sent = new[] { Protocol.Hello("key"), Protocol.Pair("abc-234", "Den PC"), Protocol.Live(), Protocol.Stop(), Protocol.Now("Song", "Band", true), Protocol.Jam("https://spotify.link/x"), Protocol.Done(7), Protocol.Clear() };
 		Assert.Equal(Protocol.Client.Keys.Order(), sent.Select((m) => Json(m).GetProperty("type").GetString()!).Order());
 		foreach(var message in sent)
 		{
@@ -59,7 +59,7 @@ public class ProtocolTests
 				Assert.Equal(kind, value.ValueKind switch { JsonValueKind.String => "string", JsonValueKind.Number => "number", _ => "boolean" });
 			}
 		}
-		Assert.Equal("{\"type\":\"hello\",\"v\":1,\"token\":\"key\"}", sent[0]);
+		Assert.Equal("{\"type\":\"hello\",\"v\":2,\"token\":\"key\"}", sent[0]);
 		Assert.Equal("{\"type\":\"live\"}", sent[2]);
 	}
 
@@ -114,7 +114,7 @@ public class ProtocolTests
 			["pause"] = "{\"type\":\"pause\",\"reason\":\"Bean paused it\"}",
 			["resume"] = "{\"type\":\"resume\"}",
 			["skip"] = "{\"type\":\"skip\"}",
-			["request"] = "{\"type\":\"request\",\"by\":\"Bean\",\"song\":\"Mr. Brightside\"}",
+			["request"] = "{\"type\":\"request\",\"id\":7,\"by\":\"Bean\",\"song\":\"Mr. Brightside\"}",
 			["notify"] = "{\"type\":\"notify\",\"text\":\"Paused for a summon.\"}"
 		};
 		Assert.Equal(Protocol.Server.Keys.Order(), messages.Keys.Order());

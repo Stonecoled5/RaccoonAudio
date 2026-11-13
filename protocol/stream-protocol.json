@@ -1,5 +1,5 @@
 {
-	"version": 1,
+	"version": 2,
 	"path": "/stream",
 	"audio": { "codec": "opus", "sampleRate": 48000, "channels": 2, "frameMs": 20 },
 	"limits": {
@@ -18,7 +18,9 @@
 		"live": {},
 		"stop": {},
 		"now": { "title": "string", "artist": "string", "playing": "boolean" },
-		"jam": { "url": "string" }
+		"jam": { "url": "string" },
+		"done": { "id": "number" },
+		"clear": {}
 	},
 	"server": {
 		"welcome": { "v": "number" },
@@ -29,7 +31,7 @@
 		"pause": { "reason": "string" },
 		"resume": {},
 		"skip": {},
-		"request": { "by": "string", "song": "string" },
+		"request": { "id": "number", "by": "string", "song": "string" },
 		"notify": { "text": "string" }
 	},
 	"errors": {

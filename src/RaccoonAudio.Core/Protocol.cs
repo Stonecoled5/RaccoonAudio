@@ -90,6 +90,9 @@ public static class Protocol
 					case "number" when value is int number:
 						json.WriteNumber(name, number);
 						break;
+					case "number" when value is long big:
+						json.WriteNumber(name, big);
+						break;
 					case "boolean" when value is bool flag:
 						json.WriteBoolean(name, flag);
 						break;
@@ -110,6 +113,9 @@ public static class Protocol
 	public static string Stop() => Build("stop");
 	public static string Now(string title, string artist, bool playing) => Build("now", ("title", Fit("title", title)), ("artist", Fit("artist", artist)), ("playing", playing));
 	public static string Jam(string url) => Build("jam", ("url", url));
+	// The streamer has dealt with a song request, or with all of them
+	public static string Done(long id) => Build("done", ("id", id));
+	public static string Clear() => Build("clear");
 
 	// A pairing code as someone typed it: upper case, without the spaces or dashes people add
 	public static string TidyCode(string typed) => new string(typed.Where((c) => !char.IsWhiteSpace(c) && c != '-').ToArray()).ToUpperInvariant();

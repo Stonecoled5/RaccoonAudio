@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Drawing.Drawing2D;
 using RaccoonAudio.Audio;
 using RaccoonAudio.Core;
@@ -28,6 +29,15 @@ sealed class TrayApp : ApplicationContext
 	readonly Icon idleIcon = Dot(Color.FromArgb(140, 140, 140));
 	readonly Icon readyIcon = Dot(Color.FromArgb(70, 160, 90));
 	readonly Icon liveIcon = Dot(Color.FromArgb(220, 50, 50));
+	// The same, with a mark for song requests that haven't been looked at
+	readonly Icon idleMarked = Dot(Color.FromArgb(140, 140, 140), true);
+	readonly Icon readyMarked = Dot(Color.FromArgb(70, 160, 90), true);
+	readonly Icon liveMarked = Dot(Color.FromArgb(220, 50, 50), true);
+	// The songs people have asked for with /radio add, until they're ticked off
+	readonly RequestList requests = new();
+	readonly ToolStripMenuItem requestsItem = new("Requests");
+	// How many requests the icon's menu lists before it just counts the rest
+	const int MenuRequests = 10;
 	MainForm? window;
 
 	// How far the program is turned down on this computer while live, when that's wanted: a thousandth, which is
@@ -67,6 +77,12 @@ sealed class TrayApp : ApplicationContext
 		var menu = new ContextMenuStrip();
 		menu.Items.Add("Open Raccoon Audio", null, (_, _) => ShowWindow());
 		menu.Items.Add(liveItem);
+		menu.Items.Add(requestsItem);
+		// Opening the menu is seeing how many there are
+		menu.Opening += (_, _) => RequestsSeen();
+		// Clicking a pop-up by the clock opens the window, where the requests are
+		tray.BalloonTipClicked += (_, _) => ShowWindow();
+		RequestsChanged();
 		menu.Items.Add(new ToolStripSeparator());
 		menu.Items.Add("Exit", null, async (_, _) => await ExitAsync());
 		liveItem.Click += (_, _) => ToggleLive();
@@ -101,6 +117,91 @@ sealed class TrayApp : ApplicationContext
 		window.WindowState = FormWindowState.Normal;
 		window.Activate();
 		window.Render();
+		RequestsSeen();
+	}
+
+	// --- Song requests ---
+
+	public IReadOnlyList<SongRequest> Requests => requests.All;
+
+	// Finds the request in Spotify: a search for what was typed, or the very thing if they sent a Spotify link.
+	// Adding it to the queue there is the streamer's to do.
+	public void OpenInSpotify(SongRequest request)
+	{
+		try
+		{
+			Process.Start(new ProcessStartInfo(Spotify.AppLinkFor(request.Song)) { UseShellExecute = true })?.Dispose();
+		}
+		catch(Exception)
+		{
+			// No Spotify program on this computer to hand it to: the same thing in a web browser
+			try
+			{
+				Process.Start(new ProcessStartInfo(Spotify.WebLinkFor(request.Song)) { UseShellExecute = true })?.Dispose();
+			}
+			catch(Exception)
+			{
+				Tell("Couldn't open Spotify for that request.", false);
+			}
+		}
+	}
+
+	// Played, or not wanted: it comes off the list, and whoever asked can ask for another
+	public void RequestDone(SongRequest request)
+	{
+		if(requests.Done(request)) RequestsChanged();
+	}
+
+	public void ClearRequests()
+	{
+		// Live, the bot is told in one message. Otherwise it's told about each as soon as there's a stream again.
+		if(client.SendClear()) requests.ClearTold();
+		else requests.Clear();
+		RequestsChanged();
+	}
+
+	public void RequestsSeen()
+	{
+		if(requests.Unseen == 0) return;
+		requests.Seen();
+		tray.Icon = IconFor(client.State);
+	}
+
+	// Brings the icon, its menu and the window in line with the list
+	void RequestsChanged()
+	{
+		tray.Icon = IconFor(client.State);
+		var all = requests.All;
+		requestsItem.Text = all.Count == 0 ? "Requests" : "Requests (" + all.Count + ")";
+		var items = requestsItem.DropDownItems;
+		while(items.Count > 0)
+		{
+			var old = items[0];
+			items.RemoveAt(0);
+			old.Dispose();
+		}
+		if(all.Count == 0) items.Add(new ToolStripMenuItem("None yet. People ask with /radio add.") { Enabled = false });
+		foreach(var request in all.Take(MenuRequests))
+		{
+			var item = new ToolStripMenuItem(InMenu(Short(request.Song, 45) + "   (" + Short(request.By, 20) + ")")) { ToolTipText = "Open in Spotify" };
+			item.Click += (_, _) => OpenInSpotify(request);
+			items.Add(item);
+		}
+		if(all.Count > MenuRequests) items.Add(new ToolStripMenuItem("…and " + (all.Count - MenuRequests) + " more in the window") { Enabled = false });
+		items.Add(new ToolStripSeparator());
+		items.Add("Show them all…", null, (_, _) => ShowWindow());
+		if(all.Count > 0) items.Add("Clear all", null, (_, _) => ClearRequests());
+		if(window is { IsDisposed: false }) window.ShowRequests(all);
+	}
+
+	static string Short(string text, int most) => text.Length <= most ? text : text[..(most - 1)] + "…";
+	// A menu reads "&" as "underline the next letter"
+	static string InMenu(string text) => text.Replace("&", "&&");
+
+	Icon IconFor(ClientState state)
+	{
+		var marked = requests.Unseen > 0;
+		return state == ClientState.Live ? (marked ? liveMarked : liveIcon) : state == ClientState.Connected ? (marked ? readyMarked : readyIcon) : (marked ? idleMarked : idleIcon);
 	}
 
 	public void ToggleLive()
@@ -228,7 +329,7 @@ sealed class TrayApp : ApplicationContext
 			StartCapture();
 		}
 		else StopCapture();
-		tray.Icon = state == ClientState.Live ? liveIcon : state == ClientState.Connected ? readyIcon : idleIcon;
+		tray.Icon = IconFor(state);
 		tray.Text = "Raccoon Audio: " + Describe(state);
 		liveItem.Text = state == ClientState.Live || client.WantsLive ? "Stop" : "Go live";
 		liveItem.Enabled = state is ClientState.Connected or ClientState.Live or ClientState.Reconnecting;
@@ -252,7 +353,11 @@ sealed class TrayApp : ApplicationContext
 				else Tell("The channel voted to skip this song.", true);
 				break;
 			case "request":
-				Tell(message.Text("by") + " asked for: " + message.Text("song"), true);
+				// It goes on the list, and pops up by the clock unless the window is what's being looked at
+				var looking = window is { IsDisposed: false, Visible: true } && window.WindowState != FormWindowState.Minimized && Form.ActiveForm == window;
+				requests.Add(message.Number("id"), message.Text("by"), message.Text("song"), DateTime.Now, seen: looking);
+				if(!looking) tray.ShowBalloonTip(5000, message.Text("by") == "" ? "Song request" : "Song request from " + Short(message.Text("by"), 40), Short(message.Text("song"), 200), ToolTipIcon.None);
+				RequestsChanged();
 				break;
 			case "notify":
 				Tell(message.Text("text"), true);
@@ -332,7 +437,12 @@ sealed class TrayApp : ApplicationContext
 	void EverySecond()
 	{
 		// A program that opened its sound after the stream started, or whose slider was moved, is turned down again
-		if(client.State == ClientState.Live) Quieten();
+		if(client.State == ClientState.Live)
+		{
+			Quieten();
+			// Requests ticked off since last time: the bot is told a couple a second, well inside how fast it listens
+			foreach(var id in requests.NextToTell(2)) client.SendDone(id);
+		}
 		if(window is { IsDisposed: false, Visible: true }) window.ShowSound(SoundStatus());
 	}
 
@@ -376,8 +486,9 @@ sealed class TrayApp : ApplicationContext
 		_ => "not connected"
 	};
 
-	// The icon by the clock: a coloured dot. Grey when idle, green when connected, red while live.
-	static Icon Dot(Color colour)
+	// The icon by the clock: a coloured dot. Grey when idle, green when connected, red while live. Marked, it has a
+	// small yellow dot in the corner.
+	static Icon Dot(Color colour, bool marked = false)
 	{
 		using var image = new Bitmap(32, 32);
 		using(var drawing = Graphics.FromImage(image))
@@ -388,6 +499,12 @@ sealed class TrayApp : ApplicationContext
 			drawing.FillEllipse(fill, 3, 3, 26, 26);
 			using var ring = new Pen(Color.FromArgb(40, 40, 40), 2);
 			drawing.DrawEllipse(ring, 3, 3, 26, 26);
+			if(marked)
+			{
+				using var mark = new SolidBrush(Color.FromArgb(255, 205, 40));
+				drawing.FillEllipse(mark, 17, 0, 15, 15);
+				drawing.DrawEllipse(ring, 17, 0, 14, 14);
+			}
 		}
 		return Icon.FromHandle(image.GetHicon());
 	}

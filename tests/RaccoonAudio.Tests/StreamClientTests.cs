@@ -352,7 +352,7 @@ public class StreamClientTests
 		socket.Say(new { type = "pause", reason = "Bean paused it" });
 		socket.Say(new { type = "resume" });
 		socket.Say(new { type = "skip" });
-		socket.Say(new { type = "request", by = "Bean", song = "Mr. Brightside" });
+		socket.Say(new { type = "request", id = 7, by = "Bean", song = "Mr. Brightside" });
 		socket.Say(new { type = "notify", text = "Paused for a summon." });
 		await Rig.Until("all five", () => rig.Said.Count >= 5);
 		Assert.Equal(["pause", "resume", "skip", "request", "notify"], rig.Said.Select((m) => m.Type));
