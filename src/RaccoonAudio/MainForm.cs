@@ -144,7 +144,7 @@ sealed class MainForm : Form
 		skipTell.CheckedChanged += (_, _) => { if(!rendering && skipTell.Checked) app.SetSkipAutomatically(false); };
 		shareJam.Click += (_, _) =>
 		{
-			if(!app.ShareJam(jam.Text)) MessageBox.Show(this, "That doesn't look like a Spotify Jam link. It's the one Spotify gives you when you start a Jam, starting with https://spotify.link/ or https://open.spotify.com/.", Text);
+			if(!app.ShareJam(jam.Text)) RaccoonDialog.Tell(this, "Spotify Jam link", "That isn't a Jam link", "It's the one Spotify gives you when you start a Jam, starting with https://spotify.link/ or https://open.spotify.com/.");
 		};
 		// The expander flips itself; the settings follow it
 		advanced.Click += (_, _) =>
@@ -156,7 +156,7 @@ sealed class MainForm : Form
 		updateOnStartup.CheckedChanged += (_, _) => { if(!rendering) app.SetUpdateOnStartup(updateOnStartup.Checked); };
 		unpair.Click += async (_, _) =>
 		{
-			if(MessageBox.Show(this, "Unpair this computer? It comes off your list in /me too, and you'll need a new pairing code to use it again.", Text, MessageBoxButtons.OKCancel) == DialogResult.OK) await app.UnpairAsync();
+			if(RaccoonDialog.Ask(this, "Unpair", "Unpair this computer?", "It comes off your list in /me too, and you'll need a new pairing code to use it again.", "Unpair")) await app.UnpairAsync();
 		};
 		// Closing the window leaves it running by the clock. Exit is in the icon's menu.
 		FormClosing += (_, closing) =>
@@ -359,51 +359,21 @@ sealed class MainForm : Form
 }
 
 // The small window that asks for the pairing code
-sealed class PairForm : Form
+sealed class PairForm : RaccoonDialog
 {
-	readonly TextBox code = new() { Width = 300, MaxLength = 12, Font = new Font("Consolas", 18, FontStyle.Bold), CharacterCasing = CharacterCasing.Upper, TextAlign = HorizontalAlignment.Center };
+	readonly TextBox code = new() { Width = 300, MaxLength = 12, Font = new Font("Consolas", 18, FontStyle.Bold), CharacterCasing = CharacterCasing.Upper, TextAlign = HorizontalAlignment.Center, Margin = new Padding(3, 0, 3, 0) };
 	public string Code => code.Text;
 
-	// Laid out like the update window: the raccoon on the left, then a heading, what to do, the code and the buttons,
-	// with room all round. Its size is set before it's shown, so it opens centred over the main window.
 	public PairForm(string botName)
+		: base("Pair with " + botName, "Pair with " + botName,
+			"In Discord, run /me, open Audio app… and press Get a pairing code. Type the six characters here. The code works once and runs out after ten minutes.")
 	{
-		Text = "Pair with " + botName;
-		Icon = Theme.AppIcon;
-		FormBorderStyle = FormBorderStyle.FixedDialog;
-		MaximizeBox = false;
-		MinimizeBox = false;
-		ShowInTaskbar = false;
-		StartPosition = FormStartPosition.CenterParent;
-		var face = new PictureBox { Image = Theme.Picture, SizeMode = PictureBoxSizeMode.Zoom, Size = new Size(72, 72), Margin = new Padding(0, 0, 16, 0) };
-		var heading = new Label { Text = "Pair with " + botName, AutoSize = true, UseMnemonic = false, Font = new Font(SystemFonts.MessageBoxFont!.FontFamily, 12, FontStyle.Bold), Margin = new Padding(3, 0, 3, 8) };
-		var steps = new Label { AutoSize = true, MaximumSize = new Size(320, 0), UseMnemonic = false, Margin = new Padding(3, 0, 3, 14),
-			Text = "In Discord, run /me, open Audio app… and press Get a pairing code. Type the six characters here. The code works once and runs out after ten minutes." };
-		var ok = new AccentButton { Text = "Pair", Size = new Size(120, 40), Enabled = false, Font = new Font(SystemFonts.MessageBoxFont!.FontFamily, 11, FontStyle.Bold), Margin = new Padding(3) };
-		var cancel = new Button { Text = "Cancel", Size = new Size(96, 40), DialogResult = DialogResult.Cancel, Margin = new Padding(9, 3, 3, 3) };
-		var buttons = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 16, 0, 0) };
-		buttons.Controls.Add(ok);
-		buttons.Controls.Add(cancel);
-		code.Margin = new Padding(3, 0, 3, 0);
-		var page = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false, Margin = new Padding(0) };
-		page.Controls.Add(heading);
-		page.Controls.Add(steps);
-		page.Controls.Add(code);
-		page.Controls.Add(buttons);
-		var side = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Location = new Point(24, 22) };
-		side.Controls.Add(face);
-		side.Controls.Add(page);
-		Controls.Add(side);
-		AcceptButton = ok;
-		CancelButton = cancel;
-		Theme.Apply(this);
-		// Room all round: the content's own size plus the margins, worked out after the theme has put the code in its
-		// rounded field
-		var size = side.GetPreferredSize(Size.Empty);
-		ClientSize = new Size(side.Left + size.Width + 24, side.Top + size.Height + 22);
-		HandleCreated += (_, _) => Theme.DarkTitleBar(this);
+		Extra.Controls.Add(code);
+		var ok = Primary("Pair");
+		Secondary("Cancel");
+		ok.Enabled = false;
+		Finish();
 		Shown += (_, _) => code.Focus();
 		code.TextChanged += (_, _) => { ok.Enabled = Protocol.LooksLikeCode(code.Text); ok.Invalidate(); };
-		ok.Click += (_, _) => { DialogResult = DialogResult.OK; Close(); };
 	}
 }

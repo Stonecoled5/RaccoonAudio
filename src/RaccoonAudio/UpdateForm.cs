@@ -4,60 +4,23 @@ namespace RaccoonAudio;
 
 // The window that says a newer version is out, in front of everything else so it isn't missed (a pop-up by the clock
 // was easy to miss). Update now starts the update; Later closes it, and the update still waits in the main window and
-// the icon's menu.
-sealed class UpdateForm : Form
+// the icon's menu. It looks like every other pop-up (RaccoonDialog), and opens in the middle of the screen, since the
+// app's window may not be open.
+sealed class UpdateForm : RaccoonDialog
 {
 	// Update now was pressed
 	public event Action? UpdateNow;
 
 	public UpdateForm(AppVersion newer, AppVersion running, string why)
+		: base("Raccoon Audio update", "Raccoon Audio version " + newer + " is out",
+			"You have " + running + ". Updating takes about a minute: the app downloads the new version, closes, and opens it.", why)
 	{
-		Text = "Raccoon Audio update";
-		Icon = Theme.AppIcon;
-		FormBorderStyle = FormBorderStyle.FixedDialog;
-		MaximizeBox = false;
-		MinimizeBox = false;
 		ShowInTaskbar = true;
 		TopMost = true;
 		StartPosition = FormStartPosition.CenterScreen;
-		AutoSize = true;
-		AutoSizeMode = AutoSizeMode.GrowAndShrink;
-		Padding = new Padding(16);
-
-		var page = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
-		var face = new PictureBox { Image = Theme.Picture, SizeMode = PictureBoxSizeMode.Zoom, Size = new Size(72, 72), Margin = new Padding(0, 0, 12, 0) };
-		var side = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
-		side.Controls.Add(face);
-		side.Controls.Add(page);
-		page.Controls.Add(new Label
-		{
-			Text = "Raccoon Audio version " + newer + " is out",
-			AutoSize = true,
-			UseMnemonic = false,
-			Font = new Font(SystemFonts.MessageBoxFont!.FontFamily, 12, FontStyle.Bold),
-			Margin = new Padding(3, 0, 3, 6)
-		});
-		page.Controls.Add(new Label
-		{
-			Text = "You have " + running + ". Updating takes about a minute: the app downloads the new version, closes, and opens it.",
-			AutoSize = true,
-			UseMnemonic = false,
-			MaximumSize = new Size(380, 0)
-		});
-		if(why != "") page.Controls.Add(new Label { Text = why, AutoSize = true, UseMnemonic = false, MaximumSize = new Size(380, 0), Margin = new Padding(3, 8, 3, 3) });
-
-		var update = new AccentButton { Text = "Update now", Size = new Size(170, 40), Font = new Font(SystemFonts.MessageBoxFont!.FontFamily, 11, FontStyle.Bold) };
-		var later = new Button { Text = "Later", Size = new Size(90, 40), DialogResult = DialogResult.Cancel, Margin = new Padding(8, 3, 3, 3) };
-		var buttons = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 12, 0, 0) };
-		buttons.Controls.Add(update);
-		buttons.Controls.Add(later);
-		page.Controls.Add(buttons);
-		Controls.Add(side);
-		Theme.Apply(this);
-		HandleCreated += (_, _) => Theme.DarkTitleBar(this);
-		AcceptButton = update;
-		CancelButton = later;
-
+		var update = Primary("Update now", DialogResult.None);
+		var later = Secondary("Later", DialogResult.None);
+		Finish();
 		update.Click += (_, _) =>
 		{
 			Close();

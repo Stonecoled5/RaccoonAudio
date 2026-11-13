@@ -38,6 +38,9 @@ static class Program
 			return 0;
 		}
 
+		// Windows' look and text settings for every window from here on, the start-up messages below included
+		ApplicationConfiguration.Initialize();
+
 		// For trying the real app without touching the real pairing: RaccoonAudio --profile <folder> keeps its settings
 		// and key in that folder instead, and can run beside the ordinary copy.
 		var profile = Array.IndexOf(args, "--profile");
@@ -59,7 +62,7 @@ static class Program
 			var local = from + 1 < args.Length ? Core.UpdateSource.ForTesting(args[from + 1]) : null;
 			if(local == null)
 			{
-				MessageBox.Show("--update-from only takes an address on this computer, like http://127.0.0.1:8123/latest.", "Raccoon Audio");
+				RaccoonDialog.Tell(null, "Raccoon Audio", "That update address won't work", "--update-from only takes an address on this computer, like http://127.0.0.1:8123/latest.");
 				return 1;
 			}
 			updates = local;
@@ -79,7 +82,7 @@ static class Program
 			server = at + 1 < args.Length ? Settings.ServerUri(args[at + 1]) : null;
 			if(server == null)
 			{
-				MessageBox.Show("--server takes an address starting with wss:// (or ws://127.0.0.1 for a copy running on this computer).", "Raccoon Audio");
+				RaccoonDialog.Tell(null, "Raccoon Audio", "That server address won't work", "--server takes an address starting with wss:// (or ws://127.0.0.1 for a copy running on this computer).");
 				return 1;
 			}
 		}
@@ -87,7 +90,6 @@ static class Program
 		var afterUpdate = args.Contains("--after-update");
 		// Started with Windows, it sits by the clock without opening its window
 		var startup = new Startup(args.Contains("--tray"), updates, afterUpdate, report, separate, args, server);
-		ApplicationConfiguration.Initialize();
 #if DEBUG
 		// In a development build, touching the window from the wrong thread fails loudly instead of now and then
 		// freezing it
@@ -124,7 +126,7 @@ static class Program
 		if(!first)
 		{
 			app?.Abandon();
-			MessageBox.Show("Raccoon Audio is already running. Look for its icon by the clock.", "Raccoon Audio");
+			RaccoonDialog.Tell(null, "Raccoon Audio", "Raccoon Audio is already running", "Look for its icon by the clock.");
 			return 0;
 		}
 		try
