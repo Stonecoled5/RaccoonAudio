@@ -21,6 +21,13 @@ static class Theme
 	public static readonly Color Purple = Color.FromArgb(155, 108, 245);
 	// The tongue, for being live
 	public static readonly Color Live = Color.FromArgb(244, 98, 128);
+	// Text on something switched off: dimmer than the notes, but still readable on a dark button
+	public static readonly Color DisabledText = Color.FromArgb(100, 104, 134);
+	// Every button's corners, the big gradient ones too
+	public const float ButtonRadius = 12;
+
+	// The controls already drawn by hand, so applying the theme twice doesn't hook them up twice
+	static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Control, object> drawn = new();
 
 	static Icon? appIcon;
 	static Image? picture;
@@ -40,13 +47,8 @@ static class Theme
 			case AccentButton:
 				break;
 			case Button button:
-				button.FlatStyle = FlatStyle.Flat;
-				button.BackColor = Raised;
 				button.ForeColor = Text;
-				button.FlatAppearance.BorderColor = Border;
-				button.FlatAppearance.MouseOverBackColor = Navy;
-				button.FlatAppearance.MouseDownBackColor = Border;
-				button.Cursor = Cursors.Hand;
+				if(drawn.TryAdd(button, true)) Round(button, ButtonRadius, DisabledText);
 				break;
 			case TextBox box:
 				box.BackColor = Surface;
@@ -60,8 +62,9 @@ static class Theme
 				DarkTheme(list, "DarkMode_CFD");
 				break;
 			case CheckBox or RadioButton:
-				((ButtonBase)control).FlatStyle = FlatStyle.Flat;
 				control.ForeColor = Text;
+				// Filled with the purple of the ear cups when on
+				if(drawn.TryAdd(control, true)) Choice((ButtonBase)control, Purple, DisabledText);
 				break;
 			case Label label:
 				// Notes and small print are grey; everything else is the main text colour, unless it chose its own
@@ -105,12 +108,89 @@ static class Theme
 	public static GraphicsPath Rounded(RectangleF area, float radius)
 	{
 		var path = new GraphicsPath();
+		radius = Math.Max(1, Math.Min(radius, Math.Min(area.Width, area.Height) / 2));
 		var d = radius * 2;
 		path.AddArc(area.X, area.Y, d, d, 180, 90);
 		path.AddArc(area.Right - d, area.Y, d, d, 270, 90);
 		path.AddArc(area.Right - d, area.Bottom - d, d, d, 0, 90);
 		path.AddArc(area.X, area.Bottom - d, d, d, 90, 90);
 		path.CloseFigure();
+		return path;
+	}
+
+	// --- Drawn by hand: rounded buttons and purple check boxes and radio buttons ---
+
+	// Draws a plain button rounded, in the theme's colours, with disabled text that's still readable
+	public static void Round(Button button, float radius, Color disabledText)
+	{
+		button.FlatStyle = FlatStyle.Flat;
+		button.FlatAppearance.BorderSize = 0;
+		button.Cursor = Cursors.Hand;
+		var hovering = false;
+		var pressed = false;
+		button.MouseEnter += (_, _) => { hovering = true; button.Invalidate(); };
+		button.MouseLeave += (_, _) => { hovering = false; pressed = false; button.Invalidate(); };
+		button.MouseDown += (_, _) => { pressed = true; button.Invalidate(); };
+		button.MouseUp += (_, _) => { pressed = false; button.Invalidate(); };
+		button.Paint += (_, e) =>
+		{
+			var g = e.Graphics;
+			g.SmoothingMode = SmoothingMode.AntiAlias;
+			g.Clear(button.Parent?.BackColor ?? Background);
+			var area = new RectangleF(0.5f, 0.5f, button.Width - 1.5f, button.Height - 1.5f);
+			using var shape = Rounded(area, radius);
+			var on = button.Enabled;
+			using var fill = new SolidBrush(!on ? Surface : pressed ? Border : hovering ? Navy : Raised);
+			using var edge = new Pen(on ? Border : Raised);
+			g.FillPath(fill, shape);
+			g.DrawPath(edge, shape);
+			TextRenderer.DrawText(g, button.Text, button.Font, button.ClientRectangle, on ? Text : disabledText,
+				TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+		};
+	}
+
+	// Draws a check box or radio button with its box (or circle) filled in this colour when it's on
+	public static void Choice(ButtonBase choice, Color fillColour, Color disabledText)
+	{
+		var radio = choice is RadioButton;
+		var hovering = false;
+		choice.Cursor = Cursors.Hand;
+		choice.Padding = new Padding(8, 0, 0, 0);
+		choice.MouseEnter += (_, _) => { hovering = true; choice.Invalidate(); };
+		choice.MouseLeave += (_, _) => { hovering = false; choice.Invalidate(); };
+		choice.Paint += (_, e) =>
+		{
+			var g = e.Graphics;
+			g.SmoothingMode = SmoothingMode.AntiAlias;
+			g.Clear(choice.Parent?.BackColor ?? Background);
+			var on = choice is CheckBox box ? box.Checked : ((RadioButton)choice).Checked;
+			const float size = 16;
+			var top = (choice.Height - size) / 2f;
+			var area = new RectangleF(1, top, size, size);
+			using var shape = radio ? Circle(area) : Rounded(area, 4);
+			using var fill = new SolidBrush(on ? fillColour : Surface);
+			using var edge = new Pen(on ? fillColour : hovering ? fillColour : Border, 1.5f);
+			g.FillPath(fill, shape);
+			g.DrawPath(edge, shape);
+			if(on && radio)
+			{
+				using var dot = new SolidBrush(Color.White);
+				g.FillEllipse(dot, area.X + 5, area.Y + 5, size - 10, size - 10);
+			}
+			else if(on)
+			{
+				using var tick = new Pen(Color.White, 2.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+				g.DrawLines(tick, [new PointF(area.X + 4, area.Y + 8.5f), new PointF(area.X + 7, area.Y + 11.5f), new PointF(area.X + 12, area.Y + 5)]);
+			}
+			var text = new Rectangle((int)(area.Right + 7), 0, choice.Width - (int)(area.Right + 7), choice.Height);
+			TextRenderer.DrawText(g, choice.Text, choice.Font, text, choice.Enabled ? Text : disabledText, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.SingleLine);
+		};
+	}
+
+	static GraphicsPath Circle(RectangleF area)
+	{
+		var path = new GraphicsPath();
+		path.AddEllipse(area);
 		return path;
 	}
 
@@ -125,6 +205,9 @@ static class Theme
 sealed class AccentButton : Button
 {
 	public bool Stopping { get; set; }
+	// The corners' radius in pixels; below zero, a quarter of the height
+	public float Radius { get; set; } = Theme.ButtonRadius;
+	float Corner => Radius < 0 ? Height / 4f : Radius;
 
 	public AccentButton()
 	{
@@ -145,7 +228,7 @@ sealed class AccentButton : Button
 		g.SmoothingMode = SmoothingMode.AntiAlias;
 		g.Clear(Parent?.BackColor ?? Theme.Background);
 		var area = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
-		using var shape = Theme.Rounded(area, Height / 4f);
+		using var shape = Theme.Rounded(area, Corner);
 		var (from, to) = !Enabled ? (Theme.Raised, Theme.Raised) : Stopping ? (Theme.Live, Color.FromArgb(214, 80, 160)) : (Theme.Cyan, Theme.Purple);
 		if(hovering && Enabled)
 		{
@@ -154,11 +237,11 @@ sealed class AccentButton : Button
 		}
 		using var fill = new LinearGradientBrush(area, from, to, LinearGradientMode.Horizontal);
 		g.FillPath(fill, shape);
-		TextRenderer.DrawText(g, Text, Font, ClientRectangle, Enabled ? Color.White : Theme.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+		TextRenderer.DrawText(g, Text, Font, ClientRectangle, Enabled ? Color.White : Theme.DisabledText, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
 		if(Focused && ShowFocusCues)
 		{
 			using var ring = new Pen(Color.FromArgb(160, Color.White), 1.5f);
-			using var inner = Theme.Rounded(RectangleF.Inflate(area, -3, -3), Height / 4f - 3);
+			using var inner = Theme.Rounded(RectangleF.Inflate(area, -3, -3), Math.Max(Corner - 3, 1));
 			g.DrawPath(ring, inner);
 		}
 	}
@@ -210,5 +293,41 @@ sealed class FoldStrip : Control
 			g.FillEllipse(bubble, badge);
 			TextRenderer.DrawText(g, waiting > 99 ? "99+" : waiting.ToString(), Font, Rectangle.Round(badge), Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
 		}
+	}
+}
+
+// A heading that opens and closes a section below it: a chevron and the words, with no box around them. The chevron
+// points right when closed and down when open; on hover the words light up.
+sealed class Expander : Control
+{
+	bool open;
+	bool hovering;
+
+	public bool Open { get => open; set { open = value; Invalidate(); } }
+
+	public Expander()
+	{
+		SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true);
+		Cursor = Cursors.Hand;
+		Font = new Font(SystemFonts.MessageBoxFont!, FontStyle.Bold);
+		Size = new Size(140, 28);
+	}
+
+	protected override void OnClick(EventArgs e) { Open = !Open; base.OnClick(e); }
+	protected override void OnMouseEnter(EventArgs e) { hovering = true; Invalidate(); base.OnMouseEnter(e); }
+	protected override void OnMouseLeave(EventArgs e) { hovering = false; Invalidate(); base.OnMouseLeave(e); }
+	protected override void OnTextChanged(EventArgs e) { Width = TextRenderer.MeasureText(Text, Font).Width + 26; base.OnTextChanged(e); }
+
+	protected override void OnPaint(PaintEventArgs e)
+	{
+		var g = e.Graphics;
+		g.SmoothingMode = SmoothingMode.AntiAlias;
+		g.Clear(Parent?.BackColor ?? Theme.Background);
+		var colour = hovering ? Theme.Cyan : Theme.Text;
+		float x = 8, y = Height / 2f, half = 4.5f;
+		using var pen = new Pen(colour, 2f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+		if(open) g.DrawLines(pen, [new PointF(x - half, y - half / 2), new PointF(x, y + half / 2), new PointF(x + half, y - half / 2)]);
+		else g.DrawLines(pen, [new PointF(x - half / 2, y - half), new PointF(x + half / 2, y), new PointF(x - half / 2, y + half)]);
+		TextRenderer.DrawText(g, Text, Font, new Rectangle(20, 0, Width - 20, Height), colour, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.SingleLine);
 	}
 }

@@ -28,8 +28,8 @@ sealed class MainForm : Form
 	readonly RadioButton skipTell = new() { Text = "Just tell me", AutoSize = true };
 	readonly TextBox jam = new() { Width = 300, PlaceholderText = "https://spotify.link/…" };
 	readonly Button shareJam = new() { Text = "Share", AutoSize = true };
-	// Opens and closes the advanced settings, with an arrow that says which it is
-	readonly Button advanced = new() { Text = Collapsed, AutoSize = true, TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0, 3, 3, 3), FlatAppearance = { BorderSize = 0 } };
+	// Opens and closes the advanced settings: a chevron and the word, pointing down while they're open
+	readonly Expander advanced = new() { Text = "Advanced", Margin = new Padding(0, 3, 3, 3) };
 	readonly FlowLayoutPanel advancedPanel = new() { FlowDirection = FlowDirection.TopDown, AutoSize = true, Visible = false, WrapContents = false };
 	readonly TextBox server = new() { Width = 420 };
 	readonly Button applyServer = new() { Text = "Use this address", AutoSize = true };
@@ -146,10 +146,10 @@ sealed class MainForm : Form
 		{
 			if(!app.ShareJam(jam.Text)) MessageBox.Show(this, "That doesn't look like a Spotify Jam link. It's the one Spotify gives you when you start a Jam, starting with https://spotify.link/ or https://open.spotify.com/.", Text);
 		};
+		// The expander flips itself; the settings follow it
 		advanced.Click += (_, _) =>
 		{
-			advancedPanel.Visible = !advancedPanel.Visible;
-			advanced.Text = advancedPanel.Visible ? Expanded : Collapsed;
+			advancedPanel.Visible = advanced.Open;
 			if(advancedPanel.Visible) left.ScrollControlIntoView(advancedPanel);
 		};
 		applyServer.Click += async (_, _) =>
@@ -224,8 +224,6 @@ sealed class MainForm : Form
 		tips.SetToolTip(requestsToggle, open ? "Hide the requests" : waiting > 0 ? "Show the requests (" + waiting + " waiting)" : "Show the requests");
 	}
 
-	const string Collapsed = "▸  Advanced";
-	const string Expanded = "▾  Advanced";
 
 	// The songs people have asked for, oldest first, each with a way to find it in Spotify and to tick it off
 	public void ShowRequests(IReadOnlyList<SongRequest> requests)
