@@ -361,9 +361,11 @@ sealed class MainForm : Form
 // The small window that asks for the pairing code
 sealed class PairForm : Form
 {
-	readonly TextBox code = new() { Width = 160, MaxLength = 12, Font = new Font(FontFamily.GenericMonospace, 16), CharacterCasing = CharacterCasing.Upper, TextAlign = HorizontalAlignment.Center };
+	readonly TextBox code = new() { Width = 300, MaxLength = 12, Font = new Font("Consolas", 18, FontStyle.Bold), CharacterCasing = CharacterCasing.Upper, TextAlign = HorizontalAlignment.Center };
 	public string Code => code.Text;
 
+	// Laid out like the update window: the raccoon on the left, then a heading, what to do, the code and the buttons,
+	// with room all round. Its size is set before it's shown, so it opens centred over the main window.
 	public PairForm(string botName)
 	{
 		Text = "Pair with " + botName;
@@ -371,25 +373,37 @@ sealed class PairForm : Form
 		FormBorderStyle = FormBorderStyle.FixedDialog;
 		MaximizeBox = false;
 		MinimizeBox = false;
-		AutoSize = true;
-		AutoSizeMode = AutoSizeMode.GrowAndShrink;
-		Padding = new Padding(18);
+		ShowInTaskbar = false;
 		StartPosition = FormStartPosition.CenterParent;
-		var ok = new Button { Text = "Pair", AutoSize = true, Enabled = false };
-		var cancel = new Button { Text = "Cancel", AutoSize = true, DialogResult = DialogResult.Cancel };
-		var page = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
-		page.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(360, 0), Text = "In Discord, run /me, open Audio app… and press Get a pairing code. Type the six characters here. The code works once and runs out after ten minutes." });
-		page.Controls.Add(code);
-		var buttons = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+		var face = new PictureBox { Image = Theme.Picture, SizeMode = PictureBoxSizeMode.Zoom, Size = new Size(72, 72), Margin = new Padding(0, 0, 16, 0) };
+		var heading = new Label { Text = "Pair with " + botName, AutoSize = true, UseMnemonic = false, Font = new Font(SystemFonts.MessageBoxFont!.FontFamily, 12, FontStyle.Bold), Margin = new Padding(3, 0, 3, 8) };
+		var steps = new Label { AutoSize = true, MaximumSize = new Size(320, 0), UseMnemonic = false, Margin = new Padding(3, 0, 3, 14),
+			Text = "In Discord, run /me, open Audio app… and press Get a pairing code. Type the six characters here. The code works once and runs out after ten minutes." };
+		var ok = new AccentButton { Text = "Pair", Size = new Size(120, 40), Enabled = false, Font = new Font(SystemFonts.MessageBoxFont!.FontFamily, 11, FontStyle.Bold), Margin = new Padding(3) };
+		var cancel = new Button { Text = "Cancel", Size = new Size(96, 40), DialogResult = DialogResult.Cancel, Margin = new Padding(9, 3, 3, 3) };
+		var buttons = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 16, 0, 0) };
 		buttons.Controls.Add(ok);
 		buttons.Controls.Add(cancel);
+		code.Margin = new Padding(3, 0, 3, 0);
+		var page = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false, Margin = new Padding(0) };
+		page.Controls.Add(heading);
+		page.Controls.Add(steps);
+		page.Controls.Add(code);
 		page.Controls.Add(buttons);
-		Controls.Add(page);
+		var side = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Location = new Point(24, 22) };
+		side.Controls.Add(face);
+		side.Controls.Add(page);
+		Controls.Add(side);
 		AcceptButton = ok;
 		CancelButton = cancel;
 		Theme.Apply(this);
+		// Room all round: the content's own size plus the margins, worked out after the theme has put the code in its
+		// rounded field
+		var size = side.GetPreferredSize(Size.Empty);
+		ClientSize = new Size(side.Left + size.Width + 24, side.Top + size.Height + 22);
 		HandleCreated += (_, _) => Theme.DarkTitleBar(this);
-		code.TextChanged += (_, _) => ok.Enabled = Protocol.LooksLikeCode(code.Text);
+		Shown += (_, _) => code.Focus();
+		code.TextChanged += (_, _) => { ok.Enabled = Protocol.LooksLikeCode(code.Text); ok.Invalidate(); };
 		ok.Click += (_, _) => { DialogResult = DialogResult.OK; Close(); };
 	}
 }
