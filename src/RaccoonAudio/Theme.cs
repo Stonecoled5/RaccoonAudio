@@ -533,7 +533,9 @@ sealed class DropList : Control
 		TextRenderer.DrawText(g, selected == null ? "" : GetItemText(selected), Font, text, Enabled ? Theme.Text : Theme.DisabledText, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
 		float x = Width - 18, y = Height / 2f, half = 4.5f;
 		using var pen = new Pen(hovering || lit ? Theme.Text : Theme.Muted, 2f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
-		g.DrawLines(pen, [new PointF(x - half, y - half / 2), new PointF(x, y + half / 2), new PointF(x + half, y - half / 2)]);
+		// Pointing up while the list is open, down while it's closed
+		var tip = DroppedDown ? -half / 2 : half / 2;
+		g.DrawLines(pen, [new PointF(x - half, y - tip), new PointF(x, y + tip), new PointF(x + half, y - tip)]);
 	}
 }
 
