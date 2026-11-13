@@ -66,6 +66,10 @@ sealed class TrayApp : ApplicationContext
 	bool closed;
 	DateTime nextCheck = DateTime.UtcNow;
 	DateTime lastCheck = DateTime.MinValue;
+	// The first look for a new version, made as soon as the app starts, hasn't finished yet
+	bool startupCheck = true;
+	// The window asking whether to update, while it's open
+	UpdateForm? asking;
 	// The version that's running: the three numbers the release was built with
 	public static AppVersion Version { get; } = VersionOf(typeof(TrayApp).Assembly.GetName().Version);
 	static AppVersion VersionOf(System.Version? built) => built == null ? new AppVersion(0, 0, 0) : new AppVersion(built.Major, built.Minor, Math.Max(built.Build, 0));
@@ -275,6 +279,8 @@ sealed class TrayApp : ApplicationContext
 		if(checking || updating) return;
 		checking = true;
 		lastCheck = DateTime.UtcNow;
+		var atStartup = startupCheck;
+		var action = UpdateAction.Nothing;
 		try
 		{
 			var found = await Task.Run(() => updater.CheckAsync(Version));
@@ -288,12 +294,12 @@ sealed class TrayApp : ApplicationContext
 			else
 			{
 				Report("found version " + found.Version);
-				// Each release pops up by the clock once. After that it waits in the window and the icon's menu.
-				if(settings.UpdateOffered != found.Tag)
+				// Trying an update without anyone to click is handled below, with nothing put in front of anyone
+				if(startup.UpdateReport == null) action = UpdatePolicy.Decide(atStartup, settings.UpdateOnStartup, CanInstallNow, asked, settings.UpdateOffered == found.Tag);
+				if(action != UpdateAction.Nothing && settings.UpdateOffered != found.Tag)
 				{
 					settings.UpdateOffered = found.Tag;
 					settings.Save();
-					if(!Looking) tray.ShowBalloonTip(5000, "Raccoon Audio", "Version " + found.Version + " is out. Open Raccoon Audio and press Update to get it.", ToolTipIcon.None);
 				}
 			}
 		}
@@ -304,15 +310,51 @@ sealed class TrayApp : ApplicationContext
 			if(asked) Tell(err is UpdateException ? err.Message : "Couldn't look for a new version. " + err.Message, false);
 		}
 		checking = false;
+		startupCheck = false;
 		// It was closed while it was looking
 		if(closed) return;
 		ShowUpdate();
+		if(action == UpdateAction.Install)
+		{
+			Report("installing version " + newer!.Version + " at startup");
+			StartUpdate();
+		}
+		// At startup with the setting on, it would have installed by itself: say why it didn't
+		else if(action == UpdateAction.Ask) AskToUpdate(atStartup && settings.UpdateOnStartup ? "It would have installed by itself, but " +
+			(Published ? "you're live. Stop the stream first: updating closes the app and opens the new version." : "this copy was built for development, so it doesn't update itself.") : "");
 		// Trying an update without anyone to click: take what's offered, or close when there's nothing to take
 		if(startup.UpdateReport != null)
 		{
 			if(newer != null) StartUpdate();
 			else await ExitAsync();
 		}
+	}
+
+	// Whether an update could start right now without stopping anything: not live, and a released copy
+	bool CanInstallNow => Published && client.State != ClientState.Live && !client.WantsLive;
+
+	// A window in front of everything else, saying a newer version is out, with Update now and Later. Only one at a time.
+	void AskToUpdate(string why = "")
+	{
+		var release = newer;
+		if(release == null || updating) return;
+		if(asking is { IsDisposed: false })
+		{
+			asking.Activate();
+			return;
+		}
+		asking = new UpdateForm(release.Version, Version, why);
+		asking.UpdateNow += StartUpdate;
+		asking.FormClosed += (_, _) => asking = null;
+		asking.Show();
+		asking.Activate();
+	}
+
+	// The person's setting for installing what the look at startup finds
+	public void SetUpdateOnStartup(bool on)
+	{
+		settings.UpdateOnStartup = on;
+		settings.Save();
 	}
 
 	// The person pressed Update. Downloads the release from GitHub, checks it against the checksum GitHub publishes
@@ -334,6 +376,8 @@ sealed class TrayApp : ApplicationContext
 			return;
 		}
 		updating = true;
+		// Updating from the window or the menu while the question is still open: it's been answered
+		if(asking is { IsDisposed: false }) asking.Close();
 		var swapped = false;
 		var launched = false;
 		string? wrong = null;

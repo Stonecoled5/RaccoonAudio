@@ -30,8 +30,9 @@ Read this before you use it.
   have, what your computer is called, or anything else about you or your computer. GitHub does see the internet
   address the request comes from, as any website you visit does. If the request fails the app says nothing and
   tries again in an hour.
-- **It never changes itself without you.** When there's a newer version it tells you, and nothing is downloaded or
-  changed until you press **Update**. Then it downloads that version's zip from this repository's Releases page on
+- **It only updates itself the way you've chosen.** By default a newer version found when the app starts is installed
+  then and there; turn off **Update automatically when the app starts** under **Advanced** and nothing is downloaded
+  or changed until you press **Update**. Either way it downloads that version's zip from this repository's Releases page on
   GitHub and from nowhere else. See [Updating](#updating) for exactly what happens and what it does and doesn't
   protect you from.
 - **Your computer's key** (what proves this computer is yours) is stored encrypted for your Windows account, and is
@@ -49,11 +50,17 @@ It needs Windows 11. Nothing else has to be installed.
 
 ## Updating
 
-When a newer version is out, the app says so in three places: a line at the top of the window with an **Update**
-button, an **Update to version …** entry when you right-click the icon by the clock, and one pop-up by the clock
-(once per version, not every time you start it). Until you press **Update**, nothing is downloaded and nothing
-changes. You can also look whenever you like: **Advanced** shows the version you have and a **Check for updates**
-button.
+The app looks for a newer version as soon as it starts, and about once a day after that.
+
+- **When it starts**, a newer version is installed then and there, without asking: that's **Update automatically when
+  the app starts** under **Advanced**, on unless you turn it off. If you're live (or it can't update itself), it asks
+  instead, with a window in front of everything else.
+- **With that setting off**, and for what it finds while it's running, it asks with that window, once per version:
+  **Update now**, or **Later**.
+- Either way, a newer version also waits in a line at the top of the window with an **Update** button, and in an
+  **Update to version …** entry when you right-click the icon by the clock.
+
+You can also look whenever you like: **Advanced** shows the version you have and a **Check for updates** button.
 
 When you press **Update**, the app:
 

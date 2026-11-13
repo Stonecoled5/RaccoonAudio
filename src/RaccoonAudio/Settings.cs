@@ -32,6 +32,8 @@ sealed class Settings
 	// The newest release that's been announced with a pop-up by the clock, so each one pops up once and not every
 	// time the app starts
 	public string UpdateOffered { get; set; } = "";
+	// When the app starts and a newer version is out, install it then and there (unless it's live), instead of asking
+	public bool UpdateOnStartup { get; set; } = true;
 
 	// Where it's all kept. Only ever changed by --profile, for trying the app without touching the real pairing.
 	public static string Folder { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RaccoonAudio");

@@ -22,6 +22,34 @@ namespace RaccoonAudio.Core;
 // What it can't do: the app isn't signed, so the checksum only shows the download is the file that was published. It
 // says nothing about who published it. That rests on the GitHub account the releases come from.
 
+// What to do once a newer release has been found
+public enum UpdateAction
+{
+	// Nothing more: it waits in the window and the icon's menu
+	Nothing,
+	// Install it now, without asking
+	Install,
+	// Ask, with a window in front of everything else
+	Ask
+}
+
+public static class UpdatePolicy
+{
+	// atStartup: the look the app makes as soon as it starts. updateOnStartup: the person's setting for installing
+	// what that look finds by itself. canInstallNow: nothing stands in the way (not live, a released copy). asked: the
+	// person pressed Check for updates. alreadyOffered: this version has already been put in front of them once.
+	//
+	// What the look at startup finds is installed when the setting is on and nothing stands in the way; when something
+	// does, they're asked instead, every start, since they wanted it installed. A look they asked for always asks. A
+	// look by the clock asks once per version, and after that the update waits in the window and the menu.
+	public static UpdateAction Decide(bool atStartup, bool updateOnStartup, bool canInstallNow, bool asked, bool alreadyOffered)
+	{
+		if(atStartup && updateOnStartup) return canInstallNow ? UpdateAction.Install : UpdateAction.Ask;
+		if(asked) return UpdateAction.Ask;
+		return alreadyOffered ? UpdateAction.Nothing : UpdateAction.Ask;
+	}
+}
+
 // Something went wrong with an update. The message is whole sentences, for the person to read.
 public sealed class UpdateException(string message) : Exception(message);
 

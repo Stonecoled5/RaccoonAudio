@@ -126,6 +126,27 @@ sealed class TricklingStream(byte[] all, TimeSpan pause) : Stream
 public class AppVersionTests
 {
 	[Theory]
+	// The look at startup, with the setting on: install it, or ask (every start) when something stands in the way
+	[InlineData(true, true, true, false, false, UpdateAction.Install)]
+	[InlineData(true, true, true, false, true, UpdateAction.Install)]
+	[InlineData(true, true, false, false, false, UpdateAction.Ask)]
+	[InlineData(true, true, false, false, true, UpdateAction.Ask)]
+	// The look at startup, with the setting off: ask once per version, like a look by the clock
+	[InlineData(true, false, true, false, false, UpdateAction.Ask)]
+	[InlineData(true, false, true, false, true, UpdateAction.Nothing)]
+	// A look by the clock: never installs by itself, asks once per version
+	[InlineData(false, true, true, false, false, UpdateAction.Ask)]
+	[InlineData(false, true, true, false, true, UpdateAction.Nothing)]
+	[InlineData(false, false, true, false, true, UpdateAction.Nothing)]
+	// A look the person asked for always asks, and never installs without them saying so
+	[InlineData(false, true, true, true, true, UpdateAction.Ask)]
+	[InlineData(false, false, false, true, true, UpdateAction.Ask)]
+	public void WhatToDoWithANewerVersion(bool atStartup, bool updateOnStartup, bool canInstallNow, bool asked, bool alreadyOffered, UpdateAction expected)
+	{
+		Assert.Equal(expected, UpdatePolicy.Decide(atStartup, updateOnStartup, canInstallNow, asked, alreadyOffered));
+	}
+
+	[Theory]
 	[InlineData("v0.1.1", 0, 1, 1)]
 	[InlineData("0.1.1", 0, 1, 1)]
 	[InlineData("v12.0.345", 12, 0, 345)]
