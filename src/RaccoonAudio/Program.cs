@@ -2,6 +2,10 @@ using RaccoonAudio.Audio;
 
 namespace RaccoonAudio;
 
+// How this copy was started: in the tray or with its window, where it looks for updates, whether it's the new copy
+// after an update, and the development flags that go with those
+sealed record Startup(bool Hidden, Core.UpdateSource Updates, bool AfterUpdate, string? UpdateReport, string Separate, string[] Args);
+
 static class Program
 {
 	[STAThread]
@@ -22,6 +26,18 @@ static class Program
 		// RaccoonAudio --connect-test <ws address> <pairing code> <seconds> <report file>. It never touches the saved key.
 		if(args.Length == 5 && args[0] == "--connect-test") return ConnectTest(args[1], args[2], int.Parse(args[3]), args[4]).GetAwaiter().GetResult();
 
+		// Started by a running copy that has downloaded this one and is about to update to it, to see that this one
+		// starts at all before anything is swapped: RaccoonAudio --self-check <name>. It gets as far as the app
+		// would before opening anything, says so to whoever is waiting on that name, and closes.
+		if(args.Length == 2 && args[0] == "--self-check")
+		{
+			ApplicationConfiguration.Initialize();
+			if(Core.Protocol.Version <= 0 || !EventWaitHandle.TryOpenExisting(args[1], out var waiting)) return 1;
+			waiting.Set();
+			waiting.Dispose();
+			return 0;
+		}
+
 		// For trying the real app without touching the real pairing: RaccoonAudio --profile <folder> keeps its settings
 		// and key in that folder instead, and can run beside the ordinary copy.
 		var profile = Array.IndexOf(args, "--profile");
@@ -32,23 +48,86 @@ static class Program
 			separate = "-" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Settings.Folder.ToLowerInvariant())))[..16];
 		}
 
-		// One copy at a time: two would fight over the same connection to raccoon man
-		using var single = new Mutex(true, "RaccoonAudio-one-at-a-time" + separate, out var first);
-		if(!first)
+		// For trying an update without publishing one: RaccoonAudio --update-from http://127.0.0.1:<port>/latest looks
+		// for releases on a stand-in for GitHub on this computer (scripts/fake-release.mjs) instead of on GitHub. It
+		// only takes an address on this computer, and it's only ever a command-line flag, never a saved setting: an
+		// update address that could be changed would be a way to put someone else's program on a person's computer.
+		var updates = Core.UpdateSource.GitHub;
+		var from = Array.IndexOf(args, "--update-from");
+		if(from >= 0)
 		{
-			MessageBox.Show("Raccoon Audio is already running. Look for its icon by the clock.", "Raccoon Audio");
-			return 0;
+			var local = from + 1 < args.Length ? Core.UpdateSource.ForTesting(args[from + 1]) : null;
+			if(local == null)
+			{
+				MessageBox.Show("--update-from only takes an address on this computer, like http://127.0.0.1:8123/latest.", "Raccoon Audio");
+				return 1;
+			}
+			updates = local;
 		}
+		// With it, --update-test <report file> has the app take whatever update the stand-in offers without waiting
+		// to be clicked, write down what it tells the person, and close when there's nothing left to do. Without a
+		// stand-in it does nothing: the real app never updates unless someone presses Update.
+		var test = Array.IndexOf(args, "--update-test");
+		var report = updates.IsTest && test >= 0 && test + 1 < args.Length ? Path.GetFullPath(args[test + 1]) : null;
+
+		var afterUpdate = args.Contains("--after-update");
+		// Started with Windows, it sits by the clock without opening its window
+		var startup = new Startup(args.Contains("--tray"), updates, afterUpdate, report, separate, args);
 		ApplicationConfiguration.Initialize();
 #if DEBUG
 		// In a development build, touching the window from the wrong thread fails loudly instead of now and then
 		// freezing it
 		Control.CheckForIllegalCrossThreadCalls = true;
 #endif
-		// Started with Windows, it sits by the clock without opening its window
-		Application.Run(new TrayApp(startHidden: args.Contains("--tray")));
+
+		// Started by the copy it's replacing, after an update. That copy is still running, and it stays until it
+		// hears that this one is set up and ready to run: if this one fails before then, the old copy is still there
+		// to put itself back. So this one sets everything up first, short of connecting to raccoon man (the old copy
+		// still has that), then says so, and then waits for the old copy to close.
+		TrayApp? app = null;
+		if(afterUpdate)
+		{
+			app = new TrayApp(startup);
+			if(EventWaitHandle.TryOpenExisting(UpdateStartedName(separate), out var started))
+			{
+				started.Set();
+				started.Dispose();
+			}
+		}
+
+		// One copy at a time: two would fight over the same connection to raccoon man
+		using var single = new Mutex(false, "RaccoonAudio-one-at-a-time" + separate);
+		bool first;
+		try
+		{
+			first = single.WaitOne(afterUpdate ? TimeSpan.FromSeconds(60) : TimeSpan.Zero);
+		}
+		catch(AbandonedMutexException)
+		{
+			// The copy that had it ended without letting go: it's this one's now
+			first = true;
+		}
+		if(!first)
+		{
+			app?.Abandon();
+			MessageBox.Show("Raccoon Audio is already running. Look for its icon by the clock.", "Raccoon Audio");
+			return 0;
+		}
+		try
+		{
+			app ??= new TrayApp(startup);
+			app.Connect();
+			Application.Run(app);
+		}
+		finally
+		{
+			single.ReleaseMutex();
+		}
 		return 0;
 	}
+
+	// What a copy started after an update sets, to tell the copy it's replacing that it's set up and ready to run
+	public static string UpdateStartedName(string separate) => "RaccoonAudio-update-started" + separate;
 
 	// Pairs with a code, signs in again with the key it got, goes live, streams a tone at the right pace, says what's
 	// "playing", stops, and writes down everything the server said. For trying the app against a copy of the bot's

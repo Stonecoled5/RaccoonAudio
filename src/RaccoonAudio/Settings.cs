@@ -29,6 +29,9 @@ sealed class Settings
 	// the app ends badly mid-stream, the next start puts the volume back.
 	public string QuietedProgram { get; set; } = "";
 	public float QuietedFrom { get; set; } = 1;
+	// The newest release that's been announced with a pop-up by the clock, so each one pops up once and not every
+	// time the app starts
+	public string UpdateOffered { get; set; } = "";
 
 	// Where it's all kept. Only ever changed by --profile, for trying the app without touching the real pairing.
 	public static string Folder { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RaccoonAudio");

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Drawing.Drawing2D;
+using System.Reflection;
 using RaccoonAudio.Audio;
 using RaccoonAudio.Core;
 using RaccoonAudio.Media;
@@ -53,6 +54,25 @@ sealed class TrayApp : ApplicationContext
 	float? quietedFrom;
 	readonly System.Windows.Forms.Timer everySecond = new() { Interval = 1000 };
 
+	// Updates: where it looks, what it found, and whether it's in the middle of looking or of updating. It looks when
+	// it starts and about once a day, and it changes nothing until the person presses Update.
+	readonly Startup startup;
+	readonly Updater updater;
+	readonly ToolStripMenuItem updateItem = new("Update") { Visible = false };
+	readonly CancellationTokenSource stopUpdate = new();
+	Release? newer;
+	bool checking;
+	bool updating;
+	bool closed;
+	DateTime nextCheck = DateTime.UtcNow;
+	DateTime lastCheck = DateTime.MinValue;
+	// The version that's running: the three numbers the release was built with
+	public static AppVersion Version { get; } = VersionOf(typeof(TrayApp).Assembly.GetName().Version);
+	static AppVersion VersionOf(System.Version? built) => built == null ? new AppVersion(0, 0, 0) : new AppVersion(built.Major, built.Minor, Math.Max(built.Build, 0));
+	// A newer release, once one's been found
+	public Release? Newer => newer;
+	public bool Updating => updating;
+
 	public Settings Settings => settings;
 	public ClientState State => client.State;
 	// The last thing worth telling the person, shown in the window
@@ -61,8 +81,10 @@ sealed class TrayApp : ApplicationContext
 	// Go live was pressed and it hasn't been stopped, whether or not he's playing yet
 	public bool WantsLive => client.WantsLive;
 
-	public TrayApp(bool startHidden)
+	public TrayApp(Startup startup)
 	{
+		this.startup = startup;
+		updater = new Updater(startup.Updates);
 		// The window's thread: everything that touches the window or the icon is sent back here. It's made here, on
 		// that thread, and never taken from whatever context happens to be current: before the first control exists
 		// that can be a plain one that runs things on background threads, and a control first shown from a background
@@ -93,6 +115,8 @@ sealed class TrayApp : ApplicationContext
 			DrawRequests();
 		};
 		DrawRequests();
+		menu.Items.Add(updateItem);
+		updateItem.Click += (_, _) => StartUpdate();
 		menu.Items.Add(new ToolStripSeparator());
 		menu.Items.Add("Exit", null, async (_, _) => await ExitAsync());
 		liveItem.Click += (_, _) => ToggleLive();
@@ -114,8 +138,26 @@ sealed class TrayApp : ApplicationContext
 		AppDomain.CurrentDomain.UnhandledException += (_, _) => Louden();
 		everySecond.Tick += (_, _) => EverySecond();
 		everySecond.Start();
-		client.Start();
-		if(!startHidden) ShowWindow();
+		if(!startup.Hidden) ShowWindow();
+		Report("running version " + Version + (startup.AfterUpdate ? ", started by the copy it replaced" : ""));
+		if(startup.AfterUpdate) Tell("Updated to version " + Version + ".", true);
+		// What an update leaves beside the app, above all the old version, is deleted. After an update the old copy
+		// can take a moment to finish closing, and its file can't be deleted until it has.
+		if(Published) _ = Task.Run(async () =>
+		{
+			for(var tries = 0; tries < 20 && !ExeSwap.CleanUp(Environment.ProcessPath!); tries++) await Task.Delay(500);
+		});
+	}
+
+	// Starts the connection to raccoon man. Separate from setting up, so that a copy taking over after an update
+	// can set up while the copy it replaces is still connected, and connect once that one has closed.
+	public void Connect() => client.Start();
+
+	// Set up but never run, because another copy turned out to be running: the icon by the clock goes
+	public void Abandon()
+	{
+		tray.Visible = false;
+		tray.Dispose();
 	}
 
 	// --- What the window and the menu ask for ---
@@ -219,8 +261,305 @@ sealed class TrayApp : ApplicationContext
 		return state == ClientState.Live ? (marked ? liveMarked : liveIcon) : state == ClientState.Connected ? (marked ? readyMarked : readyIcon) : (marked ? idleMarked : idleIcon);
 	}
 
+	// --- Updates ---
+
+	// Whether this is the app as it's released: one file, with nothing of its own beside it. A development build has
+	// its parts next to it, and swapping its exe for a released one would leave a muddle, so it never updates itself.
+	static bool Published => Environment.ProcessPath is string exe && !File.Exists(Path.ChangeExtension(exe, ".dll"));
+
+	// Looks for a newer release: one request to GitHub that says nothing about the person or the computer. When the
+	// app does this by itself it says nothing unless there is one, and a look that fails is tried again in an hour.
+	// When the person asked, it says what it found either way.
+	public async Task CheckForUpdateAsync(bool asked)
+	{
+		if(checking || updating) return;
+		checking = true;
+		lastCheck = DateTime.UtcNow;
+		try
+		{
+			var found = await Task.Run(() => updater.CheckAsync(Version));
+			nextCheck = DateTime.UtcNow.AddDays(1);
+			newer = found;
+			if(found == null)
+			{
+				Report("nothing newer than version " + Version);
+				if(asked) Tell("You have the newest version (" + Version + ").", false);
+			}
+			else
+			{
+				Report("found version " + found.Version);
+				// Each release pops up by the clock once. After that it waits in the window and the icon's menu.
+				if(settings.UpdateOffered != found.Tag)
+				{
+					settings.UpdateOffered = found.Tag;
+					settings.Save();
+					if(!Looking) tray.ShowBalloonTip(5000, "Raccoon Audio", "Version " + found.Version + " is out. Open Raccoon Audio and press Update to get it.", ToolTipIcon.None);
+				}
+			}
+		}
+		catch(Exception err)
+		{
+			nextCheck = DateTime.UtcNow.AddHours(1);
+			Report("the look for a new version failed: " + err.Message);
+			if(asked) Tell(err is UpdateException ? err.Message : "Couldn't look for a new version. " + err.Message, false);
+		}
+		checking = false;
+		// It was closed while it was looking
+		if(closed) return;
+		ShowUpdate();
+		// Trying an update without anyone to click: take what's offered, or close when there's nothing to take
+		if(startup.UpdateReport != null)
+		{
+			if(newer != null) StartUpdate();
+			else await ExitAsync();
+		}
+	}
+
+	// The person pressed Update. Downloads the release from GitHub, checks it against the checksum GitHub publishes
+	// for it, starts it once to see that it runs, swaps it in for this copy, starts it for real and closes. If
+	// anything goes wrong at any step, this copy is still the one on disk, still running, and says what happened.
+	public async void StartUpdate()
+	{
+		var release = newer;
+		if(release == null || updating) return;
+		if(client.State == ClientState.Live || client.WantsLive)
+		{
+			Tell("Stop the stream first, then press Update. Updating closes the app and opens the new version.", true);
+			return;
+		}
+		var exe = Environment.ProcessPath;
+		if(exe == null || !Published)
+		{
+			Tell("This copy was built for development, so it doesn't update itself.", true);
+			return;
+		}
+		updating = true;
+		var swapped = false;
+		var launched = false;
+		string? wrong = null;
+		try
+		{
+			Report("updating to version " + release.Version);
+			Progress("Downloading version " + release.Version + "…");
+			var fresh = await Task.Run(() => updater.FetchAsync(release, exe, (percent) => ui.Post((_) => Progress("Downloading version " + release.Version + "… " + percent + "%"), null), stopUpdate.Token));
+			stopUpdate.Token.ThrowIfCancellationRequested();
+			// Before anything is swapped, the new version is started once, from where it was unpacked, to see that
+			// it runs on this computer at all
+			Progress("Checking that version " + release.Version + " starts…");
+			wrong = await StartCopyAsync(fresh, tryOut: true);
+			if(wrong == null)
+			{
+				Report("the new version starts");
+				stopUpdate.Token.ThrowIfCancellationRequested();
+				// From the moment this copy's file is renamed aside it can't fetch any part of itself it hasn't
+				// used yet (see ExeSwap), so everything is loaded now. Starting the new version just above also
+				// means everything that starting it again needs has already been used once.
+				var more = await Task.Run(LoadEverything);
+				Report("loaded the " + more + " parts of this version that hadn't been needed yet");
+				// The last moment Exit can still leave everything as it was
+				stopUpdate.Token.ThrowIfCancellationRequested();
+				ExeSwap.Replace(exe, fresh);
+				swapped = true;
+				Report("the new version is in place, starting it");
+				Progress("Starting version " + release.Version + "…");
+				wrong = await StartCopyAsync(exe, tryOut: false);
+				launched = wrong == null;
+			}
+		}
+		catch(OperationCanceledException)
+		{
+			// Exit was chosen part way through
+		}
+		catch(UpdateException err)
+		{
+			wrong = err.Message;
+		}
+		catch(Exception err)
+		{
+			Report("unexpected: " + err);
+			wrong = "Something unexpected went wrong. " + (err.Message != "" ? err.Message : err.GetType().Name);
+		}
+		if(!launched)
+		{
+			// The old version goes back where it was, if it had been moved at all, and what was downloaded goes
+			try
+			{
+				if(swapped || !File.Exists(exe)) ExeSwap.PutBack(exe);
+				ExeSwap.CleanUp(exe);
+			}
+			catch(Exception err)
+			{
+				wrong = (wrong ?? "") + " The old version couldn't be put back by itself (" + err.Message + "): look for " + Path.GetFileName(ExeSwap.OldPath(exe)) + " next to the app and rename it back to " + Path.GetFileName(exe) + ".";
+			}
+		}
+		updating = false;
+		// The new copy is up and waiting for this one to close. Or Exit was chosen, and this copy is as it was.
+		if(launched || stopUpdate.IsCancellationRequested)
+		{
+			try
+			{
+				await ExitAsync();
+			}
+			catch(Exception)
+			{
+				// Closing is all that's left to do, whatever went wrong on the way out
+				Environment.Exit(0);
+			}
+			return;
+		}
+		Tell("Couldn't update. " + wrong + " You're still on version " + Version + ", and nothing was changed.", true);
+		ShowUpdate();
+		if(startup.UpdateReport != null)
+		{
+			Report("still running version " + Version);
+			await ExitAsync();
+		}
+	}
+
+	// Starts a copy of the app and waits to hear from it. With tryOut, it's the new version being started once to see
+	// that it runs: it says it started and closes again. Without, it's the new version taking over: it sets itself
+	// up, says it's ready, and waits for this copy to close. Null if that's what happened; if not, what went wrong,
+	// with the copy stopped.
+	async Task<string?> StartCopyAsync(string path, bool tryOut)
+	{
+		var failed = tryOut ? "The new version didn't start when it was tried, so it wasn't put in place." : "The new version wouldn't start, so the old one was put back.";
+		Process? copy = null;
+		try
+		{
+			var name = Program.UpdateStartedName(startup.Separate);
+			using var started = new EventWaitHandle(false, EventResetMode.ManualReset, name);
+			// It starts in the folder this copy was started in, so a folder given on the command line still means
+			// the same place
+			var start = new ProcessStartInfo(path) { UseShellExecute = false };
+			if(tryOut)
+			{
+				start.ArgumentList.Add("--self-check");
+				start.ArgumentList.Add(name);
+			}
+			else
+			{
+				// It starts the way this copy was started, except that it knows it comes after an update, and it
+				// opens its window if this one's is open
+				foreach(var arg in startup.Args.Where((a) => a is not "--tray" and not "--after-update")) start.ArgumentList.Add(arg);
+				start.ArgumentList.Add("--after-update");
+				if(window is not { IsDisposed: false, Visible: true }) start.ArgumentList.Add("--tray");
+			}
+			copy = Process.Start(start);
+			if(copy == null) return failed;
+			var heard = Task.Run(() => started.WaitOne(TimeSpan.FromSeconds(60)));
+			var ended = copy.WaitForExitAsync();
+			await Task.WhenAny(heard, ended);
+			// Whether it said it started, however the wait ended. Then the wait is let go, before the thing it
+			// waits on is put away.
+			var said = started.WaitOne(0);
+			started.Set();
+			await heard;
+			if(said && tryOut)
+			{
+				// Tried out, it closes by itself straight after
+				await Task.WhenAny(ended, Task.Delay(TimeSpan.FromSeconds(30)));
+				if(copy.HasExited && copy.ExitCode == 0) return null;
+			}
+			else if(said && !copy.HasExited) return null;
+			Stop(copy);
+			return failed;
+		}
+		catch(Exception err)
+		{
+			if(copy != null) Stop(copy);
+			// Windows' own reason, without the file names .NET wraps round it
+			return failed + " " + (err is System.ComponentModel.Win32Exception windows ? new System.ComponentModel.Win32Exception(windows.NativeErrorCode).Message.Replace("%1", "the file") : err.Message);
+		}
+		finally
+		{
+			copy?.Dispose();
+		}
+	}
+
+	// Loads every part of the app that hasn't been needed yet: everything the loaded parts refer to, and then
+	// everything else the app was published with. How many that was.
+	static int LoadEverything()
+	{
+		var count = 0;
+		var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		var waiting = new Queue<Assembly>();
+		foreach(var loaded in AppDomain.CurrentDomain.GetAssemblies())
+		{
+			if(loaded.GetName().Name is string name) known.Add(name);
+			waiting.Enqueue(loaded);
+		}
+		void Load(AssemblyName part)
+		{
+			if(part.Name == null || !known.Add(part.Name)) return;
+			try
+			{
+				waiting.Enqueue(Assembly.Load(part));
+				count++;
+			}
+			catch(Exception)
+			{
+				// Not a part of this app, or not one that can be loaded on its own
+			}
+		}
+		while(waiting.Count > 0) foreach(var reference in waiting.Dequeue().GetReferencedAssemblies()) Load(reference);
+		if(AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") is string all)
+		{
+			foreach(var file in all.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)) Load(new AssemblyName(Path.GetFileNameWithoutExtension(file)));
+			while(waiting.Count > 0) foreach(var reference in waiting.Dequeue().GetReferencedAssemblies()) Load(reference);
+		}
+		return count;
+	}
+
+	static void Stop(Process process)
+	{
+		try
+		{
+			if(!process.HasExited) process.Kill();
+			process.WaitForExit(10000);
+		}
+		catch(Exception)
+		{
+			// Already gone
+		}
+	}
+
+	// The menu and the window are brought in line with whether there's an update and whether it's under way
+	void ShowUpdate()
+	{
+		updateItem.Visible = newer != null;
+		updateItem.Enabled = !updating;
+		if(newer != null) updateItem.Text = updating ? "Updating…" : "Update to version " + newer.Version;
+		Refresh();
+	}
+
+	// How an update is getting on, in the window
+	void Progress(string text)
+	{
+		LastWord = text;
+		ShowUpdate();
+	}
+
+	// For --update-test: what happened, written down as it happens
+	void Report(string line)
+	{
+		if(startup.UpdateReport == null) return;
+		try
+		{
+			File.AppendAllText(startup.UpdateReport, Version + ": " + line + Environment.NewLine);
+		}
+		catch(Exception)
+		{
+			// The report is only for a test
+		}
+	}
+
+	// Whether the window is what the person is looking at
+	bool Looking => window is { IsDisposed: false, Visible: true } && window.WindowState != FormWindowState.Minimized && Form.ActiveForm == window;
+
 	public void ToggleLive()
 	{
+		// It's about to close and open again as the new version
+		if(updating) return;
 		if(client.State == ClientState.Live || client.WantsLive)
 		{
 			client.StopLive();
@@ -322,6 +661,14 @@ sealed class TrayApp : ApplicationContext
 
 	public async Task ExitAsync()
 	{
+		// Part way through an update: the update is told to stop, and closes the app itself once this copy is back
+		// as it was
+		if(updating)
+		{
+			stopUpdate.Cancel();
+			return;
+		}
+		closed = true;
 		tray.Visible = false;
 		everySecond.Stop();
 		StopCapture();
@@ -329,6 +676,7 @@ sealed class TrayApp : ApplicationContext
 		client.Dispose();
 		media.Dispose();
 		capture.Dispose();
+		updater.Dispose();
 		everySecond.Dispose();
 		requestsRedraw.Dispose();
 		tray.Dispose();
@@ -351,6 +699,8 @@ sealed class TrayApp : ApplicationContext
 		tray.Text = "Raccoon Audio: " + Describe(state);
 		liveItem.Text = state == ClientState.Live || client.WantsLive ? "Stop" : "Go live";
 		liveItem.Enabled = state is ClientState.Connected or ClientState.Live or ClientState.Reconnecting;
+		// The bot says this version is too old: see whether there's a newer one to offer, unless it just looked
+		if(state == ClientState.NeedsUpdate && newer == null && DateTime.UtcNow - lastCheck > TimeSpan.FromMinutes(1)) _ = CheckForUpdateAsync(false);
 		Refresh();
 	}
 
@@ -463,6 +813,8 @@ sealed class TrayApp : ApplicationContext
 			// Requests ticked off since last time: the bot is told a couple a second, well inside how fast it listens
 			foreach(var id in requests.NextToTell(2)) client.SendDone(id);
 		}
+		// When it starts, and about once a day after
+		if(DateTime.UtcNow >= nextCheck) _ = CheckForUpdateAsync(startup.UpdateReport != null);
 		if(window is { IsDisposed: false, Visible: true }) window.ShowSound(SoundStatus());
 	}
 
@@ -482,6 +834,7 @@ sealed class TrayApp : ApplicationContext
 	void Tell(string text, bool popUp)
 	{
 		if(string.IsNullOrWhiteSpace(text)) return;
+		Report("said: " + text);
 		LastWord = text;
 		if(popUp && (window == null || !window.Visible || window.WindowState == FormWindowState.Minimized || Form.ActiveForm != window))
 		{

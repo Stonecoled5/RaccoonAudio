@@ -12,6 +12,12 @@ sealed class MainForm : Form
 	readonly TrayApp app;
 	readonly Label status = new() { AutoSize = true, Font = new Font(SystemFonts.MessageBoxFont!.FontFamily, 14, FontStyle.Bold) };
 	readonly Label word = new() { AutoSize = true, MaximumSize = new Size(420, 0), UseMnemonic = false };
+	// Only there when a newer version is out
+	readonly Label updateLine = new() { AutoSize = true, UseMnemonic = false, Margin = new Padding(3, 8, 3, 0) };
+	readonly Button update = new() { Text = "Update", AutoSize = true };
+	readonly FlowLayoutPanel updateRow;
+	readonly Label version = new() { AutoSize = true, UseMnemonic = false, Margin = new Padding(3, 8, 3, 0) };
+	readonly Button checkForUpdate = new() { Text = "Check for updates", AutoSize = true };
 	readonly ComboBox programs = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 300 };
 	readonly Button refresh = new() { Text = "Refresh", AutoSize = true };
 	readonly Label sound = new() { AutoSize = true, MaximumSize = new Size(420, 0), UseMnemonic = false };
@@ -43,6 +49,9 @@ sealed class MainForm : Form
 		var page = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false };
 		page.Controls.Add(status);
 		page.Controls.Add(word);
+		updateRow = Row(updateLine, update);
+		updateRow.Visible = false;
+		page.Controls.Add(updateRow);
 		page.Controls.Add(Spacer());
 		page.Controls.Add(Heading("Program to stream"));
 		page.Controls.Add(Row(programs, refresh));
@@ -67,6 +76,7 @@ sealed class MainForm : Form
 		advancedPanel.Controls.Add(Row(server, applyServer));
 		advancedPanel.Controls.Add(startup);
 		advancedPanel.Controls.Add(unpair);
+		advancedPanel.Controls.Add(Row(version, checkForUpdate));
 		page.Controls.Add(advancedPanel);
 
 		// The left side keeps its own width and scrolls if the window is shorter than it; the right side takes
@@ -104,6 +114,8 @@ sealed class MainForm : Form
 		quiet.CheckedChanged += (_, _) => { if(!rendering) app.SetQuietWhileLive(quiet.Checked); };
 		programs.SelectedIndexChanged += (_, _) => { if(!rendering && programs.SelectedItem is AudioProgram chosen) app.ChooseProgram(chosen.Name); };
 		live.Click += (_, _) => app.ToggleLive();
+		update.Click += (_, _) => app.StartUpdate();
+		checkForUpdate.Click += async (_, _) => await app.CheckForUpdateAsync(true);
 		pair.Click += (_, _) => AskForCode();
 		skipAuto.CheckedChanged += (_, _) => { if(!rendering && skipAuto.Checked) app.SetSkipAutomatically(true); };
 		skipTell.CheckedChanged += (_, _) => { if(!rendering && skipTell.Checked) app.SetSkipAutomatically(false); };
@@ -232,11 +244,18 @@ sealed class MainForm : Form
 			ClientState.Connected => "Join a voice channel in Discord, then press Go live.",
 			ClientState.Live => "Everyone in your voice channel hears " + app.Settings.Program + ". /radio in that channel's chat controls it.",
 			ClientState.Reconnecting => "Lost the connection to raccoon man. Trying again by itself.",
-			ClientState.NeedsUpdate => "This version is too old to talk to raccoon man. Get the latest one from where you downloaded it.",
+			ClientState.NeedsUpdate => "This version is too old to talk to raccoon man. " + (app.Newer != null ? "Press Update to get version " + app.Newer.Version + "." : "Get the latest one from where you downloaded it."),
 			_ => ""
 		};
 		live.Text = isLive || app.WantsLive ? "Stop" : "Go live";
-		live.Enabled = state is ClientState.Connected or ClientState.Live or ClientState.Reconnecting;
+		live.Enabled = state is ClientState.Connected or ClientState.Live or ClientState.Reconnecting && !app.Updating;
+		// A newer version: a line saying so and a button, and nothing happens until it's pressed
+		updateRow.Visible = app.Newer != null;
+		if(app.Newer != null) updateLine.Text = "Version " + app.Newer.Version + " is out. You have " + TrayApp.Version + ".";
+		update.Text = app.Updating ? "Updating…" : "Update";
+		update.Enabled = !app.Updating;
+		version.Text = "Version " + TrayApp.Version;
+		checkForUpdate.Enabled = !app.Updating;
 		live.Visible = app.HasKey;
 		pair.Visible = !app.HasKey;
 		unpair.Enabled = app.HasKey;

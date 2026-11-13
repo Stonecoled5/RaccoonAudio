@@ -22,8 +22,18 @@ Read this before you use it.
   the app was killed mid-stream, the next time it starts. It touches no other program's volume.
 - **It sends the title and artist of what's playing** (from Windows' own media controls), so raccoon man can show it
   and say a line about it in the voice channel's chat. Turn music tracking off in `/me` in Discord and he won't.
-- **It goes to raccoon man's server and nowhere else.** No analytics, no accounts, no logging in to Spotify or
-  anything. It doesn't update itself.
+- **Your sound and song titles go to raccoon man's server and nowhere else.** No analytics, no accounts, no logging
+  in to Spotify or anything.
+- **It asks GitHub whether there's a newer version**, when it starts and about once a day while it's running. That
+  is one request, to `https://api.github.com/repos/Stonecoled5/RaccoonAudio/releases/latest`, and all it carries is
+  the app's name (`User-Agent: RaccoonAudio`) and the kind of answer it wants. It doesn't say which version you
+  have, what your computer is called, or anything else about you or your computer. GitHub does see the internet
+  address the request comes from, as any website you visit does. If the request fails the app says nothing and
+  tries again in an hour.
+- **It never changes itself without you.** When there's a newer version it tells you, and nothing is downloaded or
+  changed until you press **Update**. Then it downloads that version's zip from this repository's Releases page on
+  GitHub and from nowhere else. See [Updating](#updating) for exactly what happens and what it does and doesn't
+  protect you from.
 - **Your computer's key** (what proves this computer is yours) is stored encrypted for your Windows account, and is
   never shown or written to a log.
 - **Playing a music service's audio to other people is against that service's terms.** That's between you and them.
@@ -36,6 +46,44 @@ Read this before you use it.
    yourself (below): it's a couple of thousand lines.
 
 It needs Windows 11. Nothing else has to be installed.
+
+## Updating
+
+When a newer version is out, the app says so in three places: a line at the top of the window with an **Update**
+button, an **Update to version …** entry when you right-click the icon by the clock, and one pop-up by the clock
+(once per version, not every time you start it). Until you press **Update**, nothing is downloaded and nothing
+changes. You can also look whenever you like: **Advanced** shows the version you have and a **Check for updates**
+button.
+
+When you press **Update**, the app:
+
+1. Downloads that version's `RaccoonAudio-win-x64.zip` from this repository's Releases page. It only takes a release
+   whose download is this app's zip, under that version, in this repository on `github.com`, and it only follows
+   the download to GitHub's own file servers (`*.githubusercontent.com`). Anything else is refused.
+2. Checks the download against the SHA-256 checksum GitHub publishes for that file. If they differ, the download is
+   thrown away.
+3. Takes `RaccoonAudio.exe` out of the zip and starts it once, beside the one you have, to see that it runs on your
+   computer. If it doesn't, it stops there.
+4. Moves the running one aside as `RaccoonAudio.exe.old` and puts the new one in its place.
+5. Starts the new version and closes. The new version deletes `RaccoonAudio.exe.old`.
+
+It takes about a minute, most of it the download (about 70 MB). It won't update while you're live: stop the stream
+first. Your settings, your pairing and **Start with Windows** aren't touched: they're kept in
+`%AppData%\RaccoonAudio` and in Windows, not in the app's file.
+
+If anything goes wrong at any step (no connection, a download that's cut off or doesn't match its checksum, a new
+version that won't start), the version you had is put back if it had been moved, keeps running, and tells you what
+happened. You can always update by hand instead: download the zip, close the app, and replace `RaccoonAudio.exe`.
+
+**Version 0.1.0 has no Update button.** If that's what you have, replace it by hand this once; every version after
+it can update itself.
+
+**What the checksum is worth, and what it isn't.** It catches a download that was damaged, cut short or swapped for
+something else on its way to you. It can't tell you who published the release. The app isn't signed, and the
+checksum comes from the same GitHub account as the download, so an update is exactly as trustworthy as that account:
+whoever can publish a release in this repository decides what **Update** installs. That's the same trust you gave it
+when you first downloaded it and chose **Run anyway**. If you'd rather not extend it, don't press **Update**: read
+what changed and build it yourself (below).
 
 ## Pairing your computer (once)
 
@@ -94,7 +142,11 @@ Only one person can stream in the server at a time.
 | No song titles | That program doesn't tell Windows what it's playing. The stream still works. |
 | Pause or skip doesn't do anything | Same reason: there's no pause or skip button for the app to press in that program. |
 | "The bot no longer knows this app" | It was unpaired in `/me`. Pair it again. |
-| "The app is older than the bot" | Download the latest version. |
+| "The app is older than the bot" | Press **Update** in the window, or right-click the icon by the clock. If there's no Update button (version 0.1.0 has none, or GitHub can't be reached), download the latest version from the Releases page and replace `RaccoonAudio.exe`. |
+| "Stop the stream first, then press Update" | Updating closes the app and opens the new version, which would end your stream. Press **Stop**, then **Update**. |
+| "Couldn't update. …" | The rest of the line says what went wrong: GitHub couldn't be reached, the download was cut off, it didn't match its checksum, the app's folder can't be written to, or the new version wouldn't start. Nothing was changed and you're still on the version you had. Try again later. If it says it can't write to its folder, move the app somewhere you can save files (Documents, say). Failing all that, update by hand: download the zip from the Releases page, close the app, and replace `RaccoonAudio.exe`. |
+| "GitHub is turning requests away for now" | GitHub limits how often one internet address can ask it things, and something else on your network used that up. Try again in an hour. |
+| A `RaccoonAudio.exe.old` next to the app | The version you had before an update. The new one deletes it when it starts. If it's still there after that, delete it yourself. |
 
 ## Building it yourself
 
@@ -109,8 +161,9 @@ How it's put together:
 
 - `src/RaccoonAudio.Core`: everything that isn't Windows-specific and can be tested on its own: the protocol
   (`Protocol.cs`, read from `protocol/stream-protocol.json`), the conversation with the bot including reconnecting
-  (`StreamClient.cs`), turning sound into 20 ms Opus packets (`OpusFramer.cs`), and turning sound back up when the
-  program has been turned down (`Pcm.cs`).
+  (`StreamClient.cs`), turning sound into 20 ms Opus packets (`OpusFramer.cs`), turning sound back up when the
+  program has been turned down (`Pcm.cs`), and updating: reading what GitHub says the newest release is, deciding
+  whether to trust it, downloading and checking it, and swapping it in (`Updates.cs`).
 - `src/RaccoonAudio`: the Windows app. Capturing one program's sound (`Audio/ProcessLoopbackCapture.cs`), finding
   programs with sound (`Audio/AudioPrograms.cs`), Windows' media controls (`Media/MediaWatcher.cs`), settings and the
   encrypted key (`Settings.cs`), and the tray icon and window (`TrayApp.cs`, `MainForm.cs`).
@@ -137,7 +190,33 @@ These are for development. None of them touches your saved key.
   that many made-up song requests once the app goes live, and says when they're ticked off. Then
   `RaccoonAudio.exe --connect-test <address> <code> <seconds> report.txt` pairs, signs in, goes live, streams a test
   tone and stops. To try the real app against it, start it with `--profile` and put the address under **Advanced**.
+- `node scripts/fake-release.mjs <zip> <version> [port] [how it goes]`: a stand-in for GitHub's releases on this
+  computer, for trying an update without publishing one. Build an older and a newer copy (the `dotnet publish` line
+  above with `-p:Version=0.1.0` and `-p:Version=0.1.1`, to two folders), zip the newer `RaccoonAudio.exe` as
+  `RaccoonAudio-win-x64.zip`, give the stand-in that zip and `0.1.1`, and start the older copy with
+  `RaccoonAudio.exe --profile <folder> --update-from http://127.0.0.1:8123/latest`. It offers the update like a real
+  one. The last argument makes it go wrong on purpose: `wrong-hash`, `cut-off`, `missing`, `elsewhere`,
+  `no-checksum`, or `checksum-file` for a release with only its own `.sha256` file. The stand-in prints every request
+  with its headers, which is how to see exactly what the app sends.
+  - `--update-from` only takes an address on this computer, and it's only ever a command-line flag. There is no
+    setting for where updates come from, on purpose: one that could be changed would be a way to put someone else's
+    program on a person's computer.
+  - Add `--update-test <report file>` and the app takes whatever the stand-in offers without being clicked, writes
+    down what it told the person, and closes. It does nothing without `--update-from`.
 
 ## Releasing
 
-Pushing a tag like `v0.1.0` builds the app on GitHub and attaches the zip to a release (`.github/workflows/release.yml`).
+Pushing a tag like `v0.1.1` builds the app on GitHub and attaches the zip, and a `.sha256` file holding its checksum,
+to a release (`.github/workflows/release.yml`).
+
+Every copy of the app that's out there offers that release to its owner within a day, so:
+
+- **The tag has to be `v` and three numbers** (`v0.1.1`), higher than the last. The app ignores anything else, and
+  it ignores drafts and pre-releases.
+- **The zip has to be called `RaccoonAudio-win-x64.zip` and have `RaccoonAudio.exe` at its top**, which is what the
+  workflow makes. Don't rename or re-upload it by hand.
+- **Try the update before you tag**, from the last released version to the new one, with `scripts/fake-release.mjs`
+  (above).
+- **Keep two-factor sign-in on the GitHub account that publishes releases, and don't hand out write access to this
+  repository.** The app isn't signed, so that account is the only thing standing between the people who use this
+  and whatever a release contains.
