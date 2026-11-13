@@ -94,14 +94,14 @@ what changed and build it yourself (below).
 
 ## Pairing your computer (once)
 
-1. In Discord, run `/me`, open **Audio app…** and press **Get a pairing code**. Only you can see it. It works once and
+1. In Discord, run `/radio play` and press **Get a pairing code**. Only you can see it. It works once and
    runs out after ten minutes. Don't share it: whoever uses it can play audio as you.
 2. In the app, press **Pair with Raccoon Man** and type the six characters.
    (The bot can be renamed: the app uses whatever name he gives when it connects.)
 
 You can pair up to three computers. To unpair one, press **Unpair** under **Go live** in the app (it shows once a computer is paired): it
-comes off your list in `/me` too. (If the bot can't be reached right then, the app says so; finish in `/me` →
-**Audio app…** in Discord.) You can also unpair any of them from `/me`.
+comes off your list in Discord too. (If the bot can't be reached right then, the app says so; finish with `/radio play`
+in Discord.) You can also unpair any of them from `/radio play`.
 
 ## Playing music
 
@@ -152,7 +152,7 @@ Only one person can stream in the server at a time.
 | It says **Reconnecting…** now and then | Raccoon Man restarts at least once a day. The app reconnects and carries on by itself within a few seconds. |
 | No song titles | That program doesn't tell Windows what it's playing. The stream still works. |
 | Pause or skip doesn't do anything | Same reason: there's no pause or skip button for the app to press in that program. |
-| "The bot no longer knows this app" | It was unpaired in `/me`. Pair it again. |
+| "The bot no longer knows this app" | It was unpaired in Discord (`/radio play`). Pair it again. |
 | "The app is older than the bot" | Press **Update** in the window, or right-click the icon by the clock. If there's no Update button (version 0.1.0 has none, or GitHub can't be reached), download the latest version from the Releases page and replace `RaccoonAudio.exe`. |
 | "Stop the stream first, then press Update" | Updating closes the app and opens the new version, which would end your stream. Press **Stop**, then **Update**. |
 | "Couldn't update. …" | The rest of the line says what went wrong: GitHub couldn't be reached, the download was cut off, it didn't match its checksum, the app's folder can't be written to, or the new version wouldn't start. Nothing was changed and you're still on the version you had. Try again later. If it says it can't write to its folder, move the app somewhere you can save files (Documents, say). Failing all that, update by hand: download the zip from the Releases page, close the app, and replace `RaccoonAudio.exe`. |

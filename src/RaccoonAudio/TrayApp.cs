@@ -669,7 +669,7 @@ sealed class TrayApp : ApplicationContext
 		client.ForgetKey();
 		client.Start();
 		Tell(told ? "This computer is unpaired, here and in /me." :
-			"This computer's key is forgotten, but the bot couldn't be reached. To finish, unpair it in /me → Audio app in Discord as well.", false);
+			"This computer's key is forgotten, but the bot couldn't be reached. To finish, unpair it in Discord with /radio play as well.", false);
 	}
 
 	public void ChooseProgram(string name)

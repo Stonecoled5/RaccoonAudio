@@ -464,7 +464,7 @@ sealed class MainForm : Form
 		status.ForeColor = isLive ? Theme.Live : Theme.Text;
 		word.Text = app.LastWord != "" ? app.LastWord : state switch
 		{
-			ClientState.NeedsPairing => "In Discord, run /me, open Audio app… and get a pairing code. Then press Pair with " + app.BotName + ".",
+			ClientState.NeedsPairing => "In Discord, run /radio play and get a pairing code. Then press Pair with " + app.BotName + ".",
 			ClientState.Connected => "Join a voice channel in Discord, then press Go live.",
 			ClientState.Live => "Everyone in your voice channel hears " + app.Settings.Program + ". /radio in that channel's chat controls it.",
 			ClientState.Reconnecting => "Lost the connection to " + app.BotName + ". Trying again by itself.",
@@ -506,7 +506,7 @@ sealed class PairForm : RaccoonDialog
 
 	public PairForm(string botName)
 		: base("Pair with " + botName, "Pair with " + botName,
-			"In Discord, run /me, open Audio app… and press Get a pairing code. Type the six characters here. The code works once and runs out after ten minutes.")
+			"In Discord, run /radio play and press Get a pairing code. Type the six characters here. The code works once and runs out after ten minutes.")
 	{
 		Extra.Controls.Add(code);
 		var ok = Primary("Pair");
