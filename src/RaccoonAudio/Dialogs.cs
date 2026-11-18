@@ -12,6 +12,8 @@ class RaccoonDialog : Form
 	readonly FlowLayoutPanel side = new() { AutoSize = true, WrapContents = false, Location = new Point(24, 22) };
 	readonly FlowLayoutPanel buttons = new() { AutoSize = true, WrapContents = false, Margin = new Padding(0, 16, 0, 0) };
 	const int TextWidth = 340;
+	readonly Label heading;
+	readonly List<Label> lines = [];
 
 	public RaccoonDialog(string title, string heading, params string[] lines)
 	{
@@ -23,18 +25,58 @@ class RaccoonDialog : Form
 		ShowInTaskbar = false;
 		StartPosition = FormStartPosition.CenterParent;
 		var face = new PictureBox { Image = Theme.Picture, SizeMode = PictureBoxSizeMode.Zoom, Size = new Size(72, 72), Margin = new Padding(0, 0, 16, 0) };
-		page.Controls.Add(new Label { Text = heading, AutoSize = true, UseMnemonic = false, MaximumSize = new Size(TextWidth, 0),
-			Font = new Font(SystemFonts.MessageBoxFont!.FontFamily, 12, FontStyle.Bold), Margin = new Padding(3, 0, 3, 8) });
-		foreach(var line in lines.Where((l) => !string.IsNullOrWhiteSpace(l)))
-		{
-			page.Controls.Add(new Label { Text = line, AutoSize = true, UseMnemonic = false, MaximumSize = new Size(TextWidth, 0), Margin = new Padding(3, 0, 3, 8) });
-		}
+		this.heading = new Label { Text = heading, AutoSize = true, UseMnemonic = false, MaximumSize = new Size(TextWidth, 0),
+			Font = new Font(SystemFonts.MessageBoxFont!.FontFamily, 12, FontStyle.Bold), Margin = new Padding(3, 0, 3, 8) };
+		page.Controls.Add(this.heading);
 		page.Controls.Add(Extra);
+		SetLines(lines);
 		page.Controls.Add(buttons);
 		side.Controls.Add(face);
 		side.Controls.Add(page);
 		Controls.Add(side);
 		HandleCreated += (_, _) => Theme.DarkTitleBar(this);
+	}
+
+	// Puts the message's lines (between the heading and Extra) in place of whatever was there
+	void SetLines(string[] text)
+	{
+		foreach(var old in lines)
+		{
+			page.Controls.Remove(old);
+			old.Dispose();
+		}
+		lines.Clear();
+		foreach(var line in text.Where((l) => !string.IsNullOrWhiteSpace(l)))
+		{
+			var label = new Label { Text = line, AutoSize = true, UseMnemonic = false, MaximumSize = new Size(TextWidth, 0), Margin = new Padding(3, 0, 3, 8), ForeColor = heading.ForeColor };
+			page.Controls.Add(label);
+			page.Controls.SetChildIndex(label, page.Controls.IndexOf(Extra));
+			lines.Add(label);
+		}
+	}
+
+	// A pop-up that's already open says something else: a new heading and message, and its size fitted to them,
+	// staying centred where it was
+	protected void Say(string heading, params string[] text)
+	{
+		SuspendLayout();
+		this.heading.Text = heading;
+		SetLines(text);
+		ResumeLayout();
+		Fit();
+	}
+
+	// The size worked out again for what's in it now, keeping the same middle once it's on screen
+	protected void Fit()
+	{
+		var middle = new Point(Left + Width / 2, Top + Height / 2);
+		var size = side.GetPreferredSize(Size.Empty);
+		ClientSize = new Size(side.Left + size.Width + 24, side.Top + size.Height + 22);
+		if(Visible)
+		{
+			var screen = Screen.FromPoint(middle).WorkingArea;
+			Location = new Point(Math.Clamp(middle.X - Width / 2, screen.Left, Math.Max(screen.Left, screen.Right - Width)), Math.Clamp(middle.Y - Height / 2, screen.Top, Math.Max(screen.Top, screen.Bottom - Height)));
+		}
 	}
 
 	// The main button: the gradient one, pressed by Enter
@@ -62,8 +104,7 @@ class RaccoonDialog : Form
 	protected void Finish()
 	{
 		Theme.Apply(this);
-		var size = side.GetPreferredSize(Size.Empty);
-		ClientSize = new Size(side.Left + size.Width + 24, side.Top + size.Height + 22);
+		Fit();
 	}
 
 	// A pop-up with one button: something to tell the person

@@ -74,13 +74,28 @@ When you press **Update**, the app:
 4. Moves the running one aside as `RaccoonAudio.exe.old` and puts the new one in its place.
 5. Starts the new version and closes. The new version deletes `RaccoonAudio.exe.old`.
 
-It takes about a minute, most of it the download (about 70 MB). It won't update while you're live: stop the stream
-first. Your settings, your pairing and **Start with Windows** aren't touched: they're kept in
+It takes about a minute, most of it the download (about 70 MB). The update's window stays open the whole time and
+shows each step, with how much has downloaded; it closes by itself when the new version opens. It won't update while
+you're live: the window says so, and its **Stop the stream and update** button does both. Your settings, your pairing and **Start with Windows** aren't touched: they're kept in
 `%AppData%\RaccoonAudio` and in Windows, not in the app's file.
 
 If anything goes wrong at any step (no connection, a download that's cut off or doesn't match its checksum, a new
 version that won't start), the version you had is put back if it had been moved, keeps running, and tells you what
-happened. You can always update by hand instead: download the zip, close the app, and replace `RaccoonAudio.exe`.
+happened in that window, until you close it. You can always update by hand instead: download the zip, close the app,
+and replace `RaccoonAudio.exe`.
+
+Before it downloads anything, it checks for what would stop an update working, and says so instead:
+
+- **It's running from inside the zip.** Opening the app straight from the zip, without unzipping it, runs it from a
+  temporary folder, and an update there would be lost. Right-click the zip, choose **Extract All**, and run it from
+  there.
+- **It's in a temporary folder**, which Windows empties now and then. Move it to a folder of its own.
+- **Its folder can't be changed**, like Program Files. Move it to a folder of its own, like `Documents\Raccoon Audio`.
+
+**The update log.** Every update the app tries is written down, step by step, in `%AppData%\RaccoonAudio\update.log`:
+where the app runs from and whether it can write there, each step, and exactly what went wrong. It holds nothing
+private (no key, no pairing) and stays small. If an update fails, the window says where the log is and **Show the
+log** finds it, so you can send it to whoever's helping you.
 
 **Version 0.1.0 has no Update button.** If that's what you have, replace it by hand this once; every version after
 it can update itself.
@@ -155,8 +170,9 @@ Only one person can stream in the server at a time.
 | Pause or skip doesn't do anything | Same reason: there's no pause or skip button for the app to press in that program. |
 | "The bot no longer knows this app" | It was unpaired in Discord (`/radio` → **Audio app**). Pair it again. |
 | "The app is older than the bot" | Press **Update** in the window, or right-click the icon by the clock. If there's no Update button (version 0.1.0 has none, or GitHub can't be reached), download the latest version from the Releases page and replace `RaccoonAudio.exe`. |
-| "Stop the stream first, then press Update" | Updating closes the app and opens the new version, which would end your stream. Press **Stop**, then **Update**. |
-| "Couldn't update. …" | The rest of the line says what went wrong: GitHub couldn't be reached, the download was cut off, it didn't match its checksum, the app's folder can't be written to, or the new version wouldn't start. Nothing was changed and you're still on the version you had. Try again later. If it says it can't write to its folder, move the app somewhere you can save files (Documents, say). Failing all that, update by hand: download the zip from the Releases page, close the app, and replace `RaccoonAudio.exe`. |
+| "Stop the stream to update" | Updating closes the app and opens the new version, which would end your stream. Press **Stop the stream and update** in the update's window, or **Stop** and then **Update**. |
+| "Unzip the app first", "Move the app out of the temporary folder", "The app's folder can't be changed" | The app has to be somewhere it can replace itself: see [Updating](#updating). |
+| "Couldn't update. …" | The rest of the line says what went wrong: GitHub couldn't be reached, the download was cut off, it didn't match its checksum, the app's folder can't be written to, or the new version wouldn't start. Nothing was changed and you're still on the version you had. Try again later. If it says it can't write to its folder, move the app somewhere you can save files (Documents, say). If it mentions an antivirus, Windows Security stopped the new (unsigned) version from being saved. Failing all that, update by hand: download the zip from the Releases page, close the app, and replace `RaccoonAudio.exe`. Either way, `%AppData%\RaccoonAudio\update.log` says exactly what happened. |
 | "GitHub is turning requests away for now" | GitHub limits how often one internet address can ask it things, and something else on your network used that up. Try again in an hour. |
 | A `RaccoonAudio.exe.old` next to the app | The version you had before an update. The new one deletes it when it starts. If it's still there after that, delete it yourself. |
 

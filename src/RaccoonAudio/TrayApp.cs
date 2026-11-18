@@ -68,8 +68,11 @@ sealed class TrayApp : ApplicationContext
 	DateTime lastCheck = DateTime.MinValue;
 	// The first look for a new version, made as soon as the app starts, hasn't finished yet
 	bool startupCheck = true;
-	// The window asking whether to update, while it's open
-	UpdateForm? asking;
+	// The update's window, while it's open: the question, then the update's progress, or why it couldn't
+	UpdateForm? updateWindow;
+	// Every update the app tries, step by step, for the person to send to whoever is helping them
+	UpdateLog? updateLog;
+	public static string UpdateLogPath => Path.Combine(Settings.Folder, "update.log");
 	// The version that's running: the three numbers the release was built with
 	public static AppVersion Version { get; } = VersionOf(typeof(TrayApp).Assembly.GetName().Version);
 	static AppVersion VersionOf(System.Version? built) => built == null ? new AppVersion(0, 0, 0) : new AppVersion(built.Major, built.Minor, Math.Max(built.Build, 0));
@@ -156,6 +159,8 @@ sealed class TrayApp : ApplicationContext
 		everySecond.Start();
 		if(!startup.Hidden) ShowWindow();
 		Report("running version " + Version + (startup.AfterUpdate ? ", started by the copy it replaced" : ""));
+		// The update log ends with the new version saying it's up, so a log that stops short of this says where
+		if(startup.AfterUpdate) Note("version " + Version + " is running, from " + Path.GetDirectoryName(Environment.ProcessPath));
 		if(startup.AfterUpdate) Tell("Updated to version " + Version + ".", true);
 		// What an update leaves beside the app, above all the old version, is deleted. After an update the old copy
 		// can take a moment to finish closing, and its file can't be deleted until it has.
@@ -360,17 +365,74 @@ sealed class TrayApp : ApplicationContext
 	{
 		var release = newer;
 		if(release == null || updating) return;
-		if(asking is { IsDisposed: false })
+		if(updateWindow is { IsDisposed: false })
 		{
-			asking.Activate();
+			updateWindow.Activate();
 			return;
 		}
-		asking = new UpdateForm(release.Version, Version, why);
-		asking.UpdateNow += StartUpdate;
-		asking.FormClosed += (_, _) => asking = null;
-		asking.Show();
-		asking.Activate();
+		OpenUpdateWindow(release, why).Show();
 	}
+
+	// The update's window: the one that's open, or a new one (not yet shown)
+	UpdateForm OpenUpdateWindow(Release release, string why = "")
+	{
+		if(updateWindow is { IsDisposed: false }) return updateWindow;
+		var opened = new UpdateForm(release.Version, Version, why);
+		opened.UpdateNow += StartUpdate;
+		opened.StopAndUpdate += StopThenUpdate;
+		opened.FormClosed += (_, _) => { if(updateWindow == opened) updateWindow = null; };
+		updateWindow = opened;
+		return opened;
+	}
+
+	// It's live and the person wants the update anyway: the stream is stopped, and once it has, the update starts
+	async void StopThenUpdate()
+	{
+		var release = newer;
+		if(release == null || updating) return;
+		Note("stopping the stream to update");
+		updateWindow?.Working("Stopping the stream…", null);
+		client.StopLive();
+		for(var i = 0; i < 100 && (client.State == ClientState.Live || client.WantsLive); i++) await Task.Delay(100);
+		StartUpdate();
+	}
+
+	// The temporary folders an app shouldn't be updated in, by every name Windows might give them
+	static List<string> TempFolders()
+	{
+		var found = new List<string>();
+		void Add(string? folder)
+		{
+			if(string.IsNullOrWhiteSpace(folder)) return;
+			found.Add(folder);
+			var longer = LongName(folder);
+			if(longer != folder) found.Add(longer);
+		}
+		Add(Path.GetTempPath());
+		Add(Environment.GetEnvironmentVariable("TEMP"));
+		Add(Environment.GetEnvironmentVariable("TMP"));
+		Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Temp"));
+		Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp"));
+		return found;
+	}
+
+	// A path with Windows' short 8.3 names (like COLEJO~1) spelled out in full, or as it was if it can't be
+	static string LongName(string path)
+	{
+		try
+		{
+			var buffer = new System.Text.StringBuilder(1024);
+			var length = GetLongPathName(path, buffer, (uint)buffer.Capacity);
+			return length > 0 && length < buffer.Capacity ? buffer.ToString() : path;
+		}
+		catch(Exception)
+		{
+			return path;
+		}
+	}
+
+	[System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+	static extern uint GetLongPathName(string shortPath, System.Text.StringBuilder longPath, uint size);
 
 	// The person's setting for installing what the look at startup finds
 	// Opens or folds away the requests side of the window, and remembers it
@@ -394,49 +456,61 @@ sealed class TrayApp : ApplicationContext
 	{
 		var release = newer;
 		if(release == null || updating) return;
-		if(client.State == ClientState.Live || client.WantsLive)
-		{
-			Tell("Stop the stream first, then press Update. Updating closes the app and opens the new version.", true);
-			return;
-		}
 		var exe = Environment.ProcessPath;
-		if(exe == null || !Published)
+		var live = client.State == ClientState.Live || client.WantsLive;
+		var place = exe != null && Published ? UpdateChecks.Look(LongName(exe), TempFolders()) : null;
+		Note("--- update from version " + Version + " to version " + release.Version + " ---");
+		Note(place?.ToString() ?? "a development build, at " + exe);
+		Note("Windows " + Environment.OSVersion.Version + (live ? ", live" : ", not live") + ", connection " + client.State);
+		var block = UpdateChecks.WhatBlocks(place, exe != null && Published, live);
+		// The update's window opens, whether it's the question being answered or the update started from the main
+		// window or the menu, and it's what says how it goes from here
+		var shown = OpenUpdateWindow(release);
+		if(block != UpdateBlock.None)
 		{
-			Tell("This copy was built for development, so it doesn't update itself.", true);
+			var (heading, message) = UpdateChecks.Explain(block, place);
+			Note("can't start: " + block + ". " + message);
+			Tell(message, false);
+			shown.Blocked(block, heading, message);
 			return;
 		}
 		updating = true;
-		// Updating from the window or the menu while the question is still open: it's been answered
-		if(asking is { IsDisposed: false }) asking.Close();
 		var swapped = false;
 		var launched = false;
 		string? wrong = null;
 		try
 		{
-			Report("updating to version " + release.Version);
-			Progress("Downloading version " + release.Version + "…");
-			var fresh = await Task.Run(() => updater.FetchAsync(release, exe, (percent) => ui.Post((_) => Progress("Downloading version " + release.Version + "… " + percent + "%"), null), stopUpdate.Token));
+			Note("updating to version " + release.Version + ", downloading " + release.Zip + " (" + release.Size + " bytes)");
+			Progress("Downloading version " + release.Version + "…", 0);
+			var lastNoted = -1;
+			var fresh = await Task.Run(() => updater.FetchAsync(release, exe!, (percent) => ui.Post((_) =>
+			{
+				Progress("Downloading version " + release.Version + "… " + percent + "%", percent);
+				// The log gets every quarter, not every percent
+				if(percent / 25 != lastNoted) Note("downloaded " + (lastNoted = percent / 25) * 25 + "%");
+			}, null), stopUpdate.Token));
+			Note("downloaded and checked against the checksum, unpacked to " + fresh);
 			stopUpdate.Token.ThrowIfCancellationRequested();
 			// Before anything is swapped, the new version is started once, from where it was unpacked, to see that
 			// it runs on this computer at all
-			Progress("Checking that version " + release.Version + " starts…");
+			Progress("Checking that version " + release.Version + " starts…", null);
 			wrong = await StartCopyAsync(fresh, tryOut: true);
 			if(wrong == null)
 			{
-				Report("the new version starts");
+				Note("the new version starts");
 				stopUpdate.Token.ThrowIfCancellationRequested();
 				// From the moment this copy's file is renamed aside it can't fetch any part of itself it hasn't
 				// used yet (see ExeSwap), so everything is loaded now. Starting the new version just above also
 				// means everything that starting it again needs has already been used once.
 				var more = await Task.Run(LoadEverything);
-				Report("loaded the " + more + " parts of this version that hadn't been needed yet");
+				Note("loaded the " + more + " parts of this version that hadn't been needed yet");
 				// The last moment Exit can still leave everything as it was
 				stopUpdate.Token.ThrowIfCancellationRequested();
-				ExeSwap.Replace(exe, fresh);
+				ExeSwap.Replace(exe!, fresh);
 				swapped = true;
-				Report("the new version is in place, starting it");
-				Progress("Starting version " + release.Version + "…");
-				wrong = await StartCopyAsync(exe, tryOut: false);
+				Note("the new version is in place, starting it");
+				Progress("Starting version " + release.Version + "…", null);
+				wrong = await StartCopyAsync(exe!, tryOut: false);
 				launched = wrong == null;
 			}
 		}
@@ -447,29 +521,32 @@ sealed class TrayApp : ApplicationContext
 		catch(UpdateException err)
 		{
 			wrong = err.Message;
+			if(err.InnerException != null) Note("why: 0x" + err.InnerException.HResult.ToString("X8") + " " + err.InnerException);
 		}
 		catch(Exception err)
 		{
-			Report("unexpected: " + err);
-			wrong = "Something unexpected went wrong. " + (err.Message != "" ? err.Message : err.GetType().Name);
+			Note("unexpected: " + err);
+			wrong = "Something unexpected went wrong. " + UpdateException.Describe(err);
 		}
 		if(!launched)
 		{
 			// The old version goes back where it was, if it had been moved at all, and what was downloaded goes
 			try
 			{
-				if(swapped || !File.Exists(exe)) ExeSwap.PutBack(exe);
-				ExeSwap.CleanUp(exe);
+				if(swapped || !File.Exists(exe)) Note(ExeSwap.PutBack(exe!) ? "put the old version back" : "there was no old version to put back");
+				ExeSwap.CleanUp(exe!);
 			}
 			catch(Exception err)
 			{
-				wrong = (wrong ?? "") + " The old version couldn't be put back by itself (" + err.Message + "): look for " + Path.GetFileName(ExeSwap.OldPath(exe)) + " next to the app and rename it back to " + Path.GetFileName(exe) + ".";
+				wrong = (wrong ?? "") + " The old version couldn't be put back by itself (" + err.Message + "): look for " + Path.GetFileName(ExeSwap.OldPath(exe!)) + " next to the app and rename it back to " + Path.GetFileName(exe) + ".";
 			}
 		}
 		updating = false;
 		// The new copy is up and waiting for this one to close. Or Exit was chosen, and this copy is as it was.
 		if(launched || stopUpdate.IsCancellationRequested)
 		{
+			Note(launched ? "version " + release.Version + " has taken over; this copy is closing" : "stopped part way, because the app was closed; nothing was changed");
+			if(updateWindow is { IsDisposed: false }) updateWindow.Done();
 			try
 			{
 				await ExitAsync();
@@ -481,7 +558,12 @@ sealed class TrayApp : ApplicationContext
 			}
 			return;
 		}
-		Tell("Couldn't update. " + wrong + " You're still on version " + Version + ", and nothing was changed.", true);
+		var said = "Couldn't update. " + wrong + " You're still on version " + Version + ", and nothing was changed.";
+		Note("failed: " + said);
+		// Said in the update's window, which stays until it's closed, rather than in a pop-up by the clock that
+		// Windows may never show
+		Tell(said, false);
+		OpenUpdateWindow(release).Failed(said, UpdateLogPath);
 		ShowUpdate();
 		if(startup.UpdateReport != null)
 		{
@@ -606,11 +688,19 @@ sealed class TrayApp : ApplicationContext
 		Refresh();
 	}
 
-	// How an update is getting on, in the window
-	void Progress(string text)
+	// How an update is getting on: in the update's window, and in the main window
+	void Progress(string text, int? percent)
 	{
 		LastWord = text;
+		if(updateWindow is { IsDisposed: false }) updateWindow.Working(text, percent);
 		ShowUpdate();
+	}
+
+	// A step of an update, in the update log (and the test's report, when there is one)
+	void Note(string line)
+	{
+		Report(line);
+		(updateLog ??= new UpdateLog(UpdateLogPath)).Write(line);
 	}
 
 	// For --update-test: what happened, written down as it happens

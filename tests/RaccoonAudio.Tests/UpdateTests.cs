@@ -761,3 +761,134 @@ public class UpdaterTests : IDisposable
 		await Assert.ThrowsAsync<UpdateException>(() => testing.CheckAsync(running));
 	}
 }
+
+// What stops an update before it starts, said plainly up front instead of failing part way or doing nothing
+public class UpdateChecksTests : IDisposable
+{
+	readonly string folder = Path.Combine(Path.GetTempPath(), "RaccoonAudioChecks-" + Guid.NewGuid().ToString("N"));
+
+	public UpdateChecksTests() => Directory.CreateDirectory(folder);
+
+	public void Dispose()
+	{
+		try
+		{
+			Directory.Delete(folder, true);
+		}
+		catch(IOException)
+		{
+		}
+	}
+
+	static UpdatePlace Place(bool writable = true, bool zip = false, bool temp = false) => new(@"C:\Apps\RaccoonAudio.exe", @"C:\Apps", writable, zip, temp);
+
+	[Theory]
+	// Explorer, opening the app from inside the zip without unzipping it
+	[InlineData(@"C:\Users\Sam\AppData\Local\Temp\Temp1_RaccoonAudio-win-x64.zip", true)]
+	[InlineData(@"C:\Users\Sam\AppData\Local\Temp\Temp2_RaccoonAudio-win-x64 (1).zip", true)]
+	// 7-Zip and WinRAR
+	[InlineData(@"C:\Users\Sam\AppData\Local\Temp\7zO8A2B1C3D", true)]
+	[InlineData(@"C:\Users\Sam\AppData\Local\Temp\Rar$EXa1234.5678", true)]
+	// A folder named after the zip it was unzipped from is fine only if it isn't called .zip
+	[InlineData(@"C:\Users\Sam\Downloads\RaccoonAudio-win-x64.zip", true)]
+	[InlineData(@"C:\Users\Sam\Downloads\RaccoonAudio-win-x64", false)]
+	[InlineData(@"C:\Users\Sam\Documents\Raccoon Audio", false)]
+	[InlineData(@"C:\Users\Sam\Documents\zipper", false)]
+	public void ItKnowsWhenItIsRunningFromInsideAZip(string where, bool insideZip) => Assert.Equal(insideZip, UpdateChecks.LooksInsideZip(where));
+
+	[Fact]
+	public void ItKnowsATemporaryFolderByEitherName()
+	{
+		Assert.True(UpdateChecks.IsUnder(@"C:\Users\Sam\AppData\Local\Temp\abc", @"C:\Users\Sam\AppData\Local\Temp"));
+		Assert.True(UpdateChecks.IsUnder(@"c:\users\sam\appdata\local\temp", @"C:\Users\Sam\AppData\Local\Temp\"));
+		// A folder that only starts with the same letters isn't inside it
+		Assert.False(UpdateChecks.IsUnder(@"C:\Users\Sam\AppData\Local\Temporary", @"C:\Users\Sam\AppData\Local\Temp"));
+		Assert.False(UpdateChecks.IsUnder(@"C:\Users\Sam\Documents", ""));
+		var exe = Path.Combine(folder, "RaccoonAudio.exe");
+		Assert.True(UpdateChecks.Look(exe, [Path.GetTempPath()]).InTemp);
+		Assert.False(UpdateChecks.Look(exe, [@"C:\Somewhere\Else"]).InTemp);
+	}
+
+	[Fact]
+	public void ItTriesWritingForRealAndLeavesNothingBehind()
+	{
+		Assert.True(UpdateChecks.CanWrite(folder));
+		Assert.Empty(Directory.GetFiles(folder));
+		Assert.False(UpdateChecks.CanWrite(Path.Combine(folder, "not there")));
+		var place = UpdateChecks.Look(Path.Combine(folder, "RaccoonAudio.exe"), []);
+		Assert.True(place.Writable);
+		Assert.Equal(folder, place.Folder);
+		Assert.Contains(folder, place.ToString());
+		Assert.Contains("writable", place.ToString());
+	}
+
+	[Fact]
+	public void TheMostLastingProblemIsSaidFirst()
+	{
+		Assert.Equal(UpdateBlock.Development, UpdateChecks.WhatBlocks(Place(), published: false, live: true));
+		Assert.Equal(UpdateBlock.Development, UpdateChecks.WhatBlocks(null, published: true, live: false));
+		// No point stopping the stream only to be told to unzip the app
+		Assert.Equal(UpdateBlock.InsideZip, UpdateChecks.WhatBlocks(Place(zip: true, temp: true), published: true, live: true));
+		Assert.Equal(UpdateBlock.TempFolder, UpdateChecks.WhatBlocks(Place(temp: true), published: true, live: true));
+		Assert.Equal(UpdateBlock.ReadOnlyFolder, UpdateChecks.WhatBlocks(Place(writable: false), published: true, live: true));
+		Assert.Equal(UpdateBlock.Live, UpdateChecks.WhatBlocks(Place(), published: true, live: true));
+		Assert.Equal(UpdateBlock.None, UpdateChecks.WhatBlocks(Place(), published: true, live: false));
+	}
+
+	[Theory]
+	[InlineData(UpdateBlock.Development, "development")]
+	[InlineData(UpdateBlock.InsideZip, "Extract All")]
+	[InlineData(UpdateBlock.TempFolder, "temporary folder")]
+	[InlineData(UpdateBlock.ReadOnlyFolder, "Program Files")]
+	[InlineData(UpdateBlock.Live, "Stop the stream")]
+	public void EachProblemIsExplainedWithWhatToDo(UpdateBlock block, string says)
+	{
+		var (heading, message) = UpdateChecks.Explain(block, Place());
+		Assert.NotEqual("", heading);
+		Assert.Contains(says, heading + " " + message);
+		// Where the app is, when that's the problem
+		if(block is UpdateBlock.InsideZip or UpdateBlock.TempFolder or UpdateBlock.ReadOnlyFolder) Assert.Contains(@"C:\Apps", message);
+	}
+
+	[Fact]
+	public void AnErrorIsNeverDescribedAsNothing()
+	{
+		// What the friend's update said: "Couldn't unpack the download:" and then nothing
+		Assert.Equal("Disk on fire", UpdateException.Describe(new IOException("Disk on fire")));
+		var blank = UpdateException.Describe(new IOException("", unchecked((int)0x80070020)));
+		Assert.Contains("0x80070020", blank);
+		Assert.True(blank.Length > "(error 0x80070020).".Length, blank);
+		Assert.Contains("IOException", UpdateException.Describe(new IOException(" ", 0x1234)));
+		// An antivirus refusing the new version
+		Assert.Contains("antivirus", UpdateException.Describe(new IOException("", unchecked((int)0x800700E1))));
+		Assert.Contains("antivirus", UpdateException.Describe(new IOException("Operation did not complete successfully because the file contains a virus", unchecked((int)0x800700E1))));
+	}
+
+	[Fact]
+	public void TheLogKeepsEveryStepButStaysSmall()
+	{
+		var path = Path.Combine(folder, "logs", "update.log");
+		var log = new UpdateLog(path, 2000);
+		log.Write("--- update from version 0.1.11 to version 0.1.12 ---");
+		log.Write("two lines\nin one");
+		var text = File.ReadAllText(path);
+		Assert.Contains("--- update from version 0.1.11", text);
+		Assert.Contains("two lines" + Environment.NewLine + "    in one", text);
+		for(var i = 0; i < 200; i++) log.Write("step " + i);
+		Assert.True(new FileInfo(path).Length <= 2000 + 100, "the log grew to " + new FileInfo(path).Length);
+		var lines = File.ReadAllLines(path);
+		// The newest is kept, the oldest went, and it starts at a whole line
+		Assert.EndsWith("step 199", lines[^1]);
+		Assert.DoesNotContain(lines, (l) => l.Contains("--- update from"));
+		Assert.Matches(@"^\d{4}-\d{2}-\d{2} ", lines[0]);
+	}
+
+	[Fact]
+	public void ALogThatCannotBeWrittenIsNeverAProblem()
+	{
+		// A folder where the log's file should be
+		var path = Path.Combine(folder, "taken");
+		Directory.CreateDirectory(path);
+		new UpdateLog(path).Write("anything");
+	}
+}

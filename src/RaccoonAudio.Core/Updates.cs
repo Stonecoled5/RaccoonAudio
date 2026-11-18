@@ -50,8 +50,26 @@ public static class UpdatePolicy
 	}
 }
 
-// Something went wrong with an update. The message is whole sentences, for the person to read.
-public sealed class UpdateException(string message) : Exception(message);
+// Something went wrong with an update. The message is whole sentences, for the person to read; the inner error, when
+// there is one, is the technical reason, for the update log.
+public sealed class UpdateException(string message, Exception? inner = null) : Exception(message, inner)
+{
+	// What went wrong, for the person, never blank. Some of Windows' errors arrive with no message at all (one did,
+	// and the update said only "Couldn't unpack the download:"), so then it's Windows' own words for the error code,
+	// or at least the code. An antivirus refusing the new version gets a sentence of its own: it's the likeliest
+	// reason a download that arrived whole can't be saved, since the app isn't signed.
+	public static string Describe(Exception err)
+	{
+		var win32 = (err.HResult & 0xFFFF0000) == 0x80070000;
+		var code = err.HResult & 0xFFFF;
+		if(win32 && code is 225 or 226)
+			return "Windows Security (or another antivirus) stopped the new version from being saved, as it can with apps that aren't signed. Download the zip from the Releases page yourself, or let Raccoon Audio through in Windows Security's Protection history.";
+		var text = err.Message.Trim();
+		if(text != "") return text;
+		if(win32) text = new System.ComponentModel.Win32Exception(code).Message.Trim();
+		return (text != "" ? text.TrimEnd('.') : err.GetType().Name) + " (error 0x" + err.HResult.ToString("X8") + ").";
+	}
+}
 
 // A version of the app: three numbers, as in the release tag v0.1.1
 public sealed record AppVersion(int Major, int Minor, int Patch) : IComparable<AppVersion>
@@ -278,7 +296,7 @@ public sealed class Updater : IDisposable
 			}
 			catch(Exception err) when(err is UnauthorizedAccessException or IOException)
 			{
-				throw new UpdateException("The app can't write to the folder it's in (" + Path.GetDirectoryName(exePath) + "). Move it somewhere you can save files, like Documents, and try again.");
+				throw new UpdateException("The app can't write to the folder it's in (" + Path.GetDirectoryName(exePath) + "). Move it somewhere you can save files, like Documents, and try again.", err);
 			}
 			using(zip)
 			{
@@ -291,7 +309,7 @@ public sealed class Updater : IDisposable
 				}
 				catch(Exception err) when(err is IOException or UnauthorizedAccessException)
 				{
-					throw new UpdateException("Couldn't unpack the download: " + err.Message);
+					throw new UpdateException("Couldn't unpack the download: " + UpdateException.Describe(err), err);
 				}
 			}
 			fetched = true;
@@ -339,7 +357,7 @@ public sealed class Updater : IDisposable
 			catch(IOException err)
 			{
 				// Not the network: the disk
-				throw new UpdateException("Couldn't save the download next to the app. Is the disk full? " + err.Message);
+				throw new UpdateException("Couldn't save the download next to the app. Is the disk full? " + UpdateException.Describe(err), err);
 			}
 			var percent = (int)(got * 100 / release.Size);
 			if(percent != said) progress?.Invoke(said = percent);
@@ -438,13 +456,13 @@ public sealed class Updater : IDisposable
 		{
 			return await work(patience);
 		}
-		catch(OperationCanceledException) when(!stop.IsCancellationRequested)
+		catch(OperationCanceledException err) when(!stop.IsCancellationRequested)
 		{
-			throw new UpdateException(failed + " GitHub stopped answering.");
+			throw new UpdateException(failed + " GitHub stopped answering.", err);
 		}
 		catch(Exception err) when(err is HttpRequestException or IOException)
 		{
-			throw new UpdateException(failed);
+			throw new UpdateException(failed, err);
 		}
 	}
 }
@@ -483,7 +501,7 @@ public static class ExeSwap
 		}
 		catch(Exception err) when(err is IOException or UnauthorizedAccessException)
 		{
-			throw new UpdateException("Windows wouldn't let the app move itself aside to make room for the new version. " + err.Message);
+			throw new UpdateException("Windows wouldn't let the app move itself aside to make room for the new version. " + UpdateException.Describe(err), err);
 		}
 		try
 		{
@@ -492,7 +510,7 @@ public static class ExeSwap
 		catch(Exception err) when(err is IOException or UnauthorizedAccessException)
 		{
 			File.Move(old, exePath);
-			throw new UpdateException("Couldn't put the new version in place. " + err.Message);
+			throw new UpdateException("Couldn't put the new version in place. " + UpdateException.Describe(err), err);
 		}
 	}
 
