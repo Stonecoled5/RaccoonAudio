@@ -127,11 +127,12 @@ While you're live, people in the channel can use the `/radio` panel (from any ch
   the app remembers which you picked. The same list is under
   **Requests** when you right-click the icon by the clock, and the icon gets a yellow mark while there are requests
   you haven't looked at.
-  - **Open in Spotify** opens Spotify on a search for what they typed, or on the song itself if they sent a Spotify
-    link. Nothing is looked up anywhere: adding it to your queue is yours to do in Spotify.
-  - **Done** takes a request off the list, played or not. Each person can have 20 requests waiting with you, and
-    ticking one of theirs off is what gives them room for another. **Clear all** empties the list.
-  - The list is kept until you tick things off or close the app. A new stream starts everyone's count from nothing.
+  - **Search** opens Spotify on a search for what they typed, or on the song itself if they sent a Spotify
+    link. It works with Spotify from spotify.com or from the Microsoft Store, and opens open.spotify.com in your
+    browser if Spotify isn't installed. Nothing is looked up anywhere: adding it to your queue is yours to do.
+  - **Remove** takes a request off the list, played or not. Each person can have 20 requests waiting with you, and
+    removing one of theirs is what gives them room for another. **Clear all** empties the list, after asking first.
+  - The list is kept until you remove things or close the app. A new stream starts everyone's count from nothing.
 - **Spotify Jam**: paste your Jam link and press **Share**, and he posts it so people can add songs from their own
   Spotify. Hosting a Jam needs Spotify Premium, and joining one from elsewhere probably does too.
 

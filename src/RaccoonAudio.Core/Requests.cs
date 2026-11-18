@@ -76,7 +76,7 @@ public sealed class RequestList
 	}
 }
 
-// Where "Open in Spotify" goes for a request. Requests are whatever someone typed, so this never looks anything up:
+// Where Search goes for a request. Requests are whatever someone typed, so this never looks anything up:
 // it opens Spotify on a search for those words, which works for "that Drake one" as well as an exact title. If what
 // they typed is a Spotify link to a song, album, playlist or artist, it opens that instead.
 //
@@ -103,4 +103,23 @@ public static partial class Spotify
 
 	// For a web browser, when the Spotify program isn't installed
 	public static string WebLinkFor(string request) => Thing(request) is { } thing ? "https://open.spotify.com/" + thing.Kind + "/" + thing.Id : "https://open.spotify.com/search/" + Uri.EscapeDataString(request.Trim());
+
+	// The ways to open a request on this computer, best first; each is tried until one starts.
+	// - program: Spotify.exe from the ordinary installer, if it's there. It's handed the spotify: address itself, so
+	//   it works even when the spotify: link isn't set up to open it.
+	// - linkOpens: something on this computer says it opens spotify: links. That's how the Microsoft Store version is
+	//   reached, as its program can't be started by its path.
+	// - Always last, the same thing on open.spotify.com in a web browser. Without this check Windows would answer a
+	//   spotify: link nothing opens with its own "you'll need a new app" box, and the browser would never be tried.
+	public static IReadOnlyList<SpotifyOpen> WaysToOpen(string request, string? program, bool linkOpens)
+	{
+		var ways = new List<SpotifyOpen>();
+		if(program != null) ways.Add(new SpotifyOpen(program, "--uri=" + AppLinkFor(request)));
+		if(linkOpens) ways.Add(new SpotifyOpen(AppLinkFor(request), null));
+		ways.Add(new SpotifyOpen(WebLinkFor(request), null));
+		return ways;
+	}
 }
+
+// Something to start: a program with one argument, or an address for Windows to open with whatever opens it
+public sealed record SpotifyOpen(string Target, string? Argument);

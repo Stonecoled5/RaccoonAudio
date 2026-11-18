@@ -96,6 +96,40 @@ public class RequestListTests
 
 public class SpotifyLinkTests
 {
+	[Fact]
+	public void TheInstalledProgramIsTriedFirstThenTheLinkThenTheBrowser()
+	{
+		var exe = @"C:\Users\Someone\AppData\Roaming\Spotify\Spotify.exe";
+		var ways = Spotify.WaysToOpen("Mr. Brightside", exe, true);
+		Assert.Equal([
+			new SpotifyOpen(exe, "--uri=spotify:search:Mr.%20Brightside"),
+			new SpotifyOpen("spotify:search:Mr.%20Brightside", null),
+			new SpotifyOpen("https://open.spotify.com/search/Mr.%20Brightside", null),
+		], ways);
+	}
+
+	[Fact]
+	public void TheStoreVersionIsReachedByItsLink()
+	{
+		var ways = Spotify.WaysToOpen("spotify:track:4cOdK2wGLETKBW3PvgPWqT", null, true);
+		Assert.Equal([new SpotifyOpen("spotify:track:4cOdK2wGLETKBW3PvgPWqT", null), new SpotifyOpen("https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT", null)], ways);
+	}
+
+	[Fact]
+	public void WithoutSpotifyItGoesStraightToTheBrowser()
+	{
+		// A spotify: link nothing opens is never tried: Windows would ask for an app instead of failing
+		var ways = Spotify.WaysToOpen("that Drake one", null, false);
+		Assert.Equal([new SpotifyOpen("https://open.spotify.com/search/that%20Drake%20one", null)], ways);
+	}
+
+	[Fact]
+	public void WhatWasTypedIsOneArgumentToTheProgram()
+	{
+		var ways = Spotify.WaysToOpen("\" --flag & calc", @"C:\Spotify.exe", false);
+		Assert.Matches("^--uri=spotify:search:[A-Za-z0-9%._~-]*$", ways[0].Argument!);
+	}
+
 	[Theory]
 	[InlineData("Mr. Brightside", "spotify:search:Mr.%20Brightside", "https://open.spotify.com/search/Mr.%20Brightside")]
 	[InlineData("  that Drake one  ", "spotify:search:that%20Drake%20one", "https://open.spotify.com/search/that%20Drake%20one")]

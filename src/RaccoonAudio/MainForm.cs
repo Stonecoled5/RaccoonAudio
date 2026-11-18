@@ -131,7 +131,7 @@ sealed class MainForm : Form
 
 		refresh.Click += (_, _) => FillPrograms();
 		// Opening the list brings it up to date too
-		clearRequests.Click += (_, _) => app.ClearRequests();
+		clearRequests.Click += (_, _) => app.ClearRequests(this);
 		// The rows are as wide as the list, so long requests wrap instead of running off the side
 		requestRows.ClientSizeChanged += (_, _) => FitRequests();
 		// Looking at the window is seeing the requests
@@ -363,7 +363,7 @@ sealed class MainForm : Form
 	}
 
 
-	// The songs people have asked for, oldest first, each with a way to find it in Spotify and to tick it off
+	// The songs people have asked for, oldest first, each with a way to find it in Spotify and to take it off
 	public void ShowRequests(IReadOnlyList<SongRequest> requests)
 	{
 		var scrolled = requestRows.AutoScrollPosition;
@@ -377,14 +377,16 @@ sealed class MainForm : Form
 		requestsTitle.Text = requests.Count == 0 ? "Requests" : "Requests (" + requests.Count + ")";
 		if(requestsToggle.Shown) ShowToggle();
 		clearRequests.Visible = requests.Count > 0;
-		if(requests.Count == 0) requestRows.Controls.Add(new Label { Text = "No requests yet. People in your voice channel ask for songs with Ask for a song on /radio, and they wait here until you tick them off.", AutoSize = true, ForeColor = Theme.Muted, Tag = "wrap" });
+		if(requests.Count == 0) requestRows.Controls.Add(new Label { Text = "No requests yet. People in your voice channel ask for songs with Ask for a song on /radio, and they wait here until you remove them.", AutoSize = true, ForeColor = Theme.Muted, Tag = "wrap" });
 		foreach(var request in requests)
 		{
 			var song = new Label { Text = request.Song, AutoSize = true, UseMnemonic = false, Font = new Font(SystemFonts.MessageBoxFont!, FontStyle.Bold), Tag = "wrap", Margin = new Padding(3, 0, 3, 0) };
 			var who = new Label { Text = request.By + "  ·  " + request.At.ToShortTimeString(), AutoSize = true, UseMnemonic = false, ForeColor = SystemColors.GrayText, Tag = "wrap", Margin = new Padding(3, 0, 3, 2) };
-			var open = new Button { Text = "Open in Spotify", AutoSize = true };
-			var done = new Button { Text = "Done", AutoSize = true };
-			open.Click += (_, _) => app.OpenInSpotify(request);
+			var open = new Button { Text = "Search", AutoSize = true };
+			var done = new Button { Text = "Remove", AutoSize = true };
+			tips.SetToolTip(open, "Search for it in Spotify");
+			tips.SetToolTip(done, "Take it off the list");
+			open.Click += (_, _) => app.SearchSpotify(request);
 			done.Click += (_, _) => app.RequestDone(request);
 			var row = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = new Padding(0, 0, 0, 10), Padding = new Padding(8) };
 			row.Controls.Add(song);

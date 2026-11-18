@@ -193,25 +193,25 @@ sealed class TrayApp : ApplicationContext
 	public IReadOnlyList<SongRequest> Requests => requests.All;
 
 	// Finds the request in Spotify: a search for what was typed, or the very thing if they sent a Spotify link.
-	// Adding it to the queue there is the streamer's to do.
-	public void OpenInSpotify(SongRequest request)
+	// Adding it to the queue there is the streamer's to do. It looks for Spotify each time, so it works whichever way
+	// Spotify is installed, and in a web browser if it isn't.
+	public void SearchSpotify(SongRequest request)
 	{
-		try
+		foreach(var way in Spotify.WaysToOpen(request.Song, SpotifyFinder.Program(), SpotifyFinder.LinkOpens()))
 		{
-			Process.Start(new ProcessStartInfo(Spotify.AppLinkFor(request.Song)) { UseShellExecute = true })?.Dispose();
-		}
-		catch(Exception)
-		{
-			// No Spotify program on this computer to hand it to: the same thing in a web browser
 			try
 			{
-				Process.Start(new ProcessStartInfo(Spotify.WebLinkFor(request.Song)) { UseShellExecute = true })?.Dispose();
+				var start = new ProcessStartInfo(way.Target) { UseShellExecute = true };
+				if(way.Argument != null) start.ArgumentList.Add(way.Argument);
+				Process.Start(start)?.Dispose();
+				return;
 			}
 			catch(Exception)
 			{
-				Tell("Couldn't open Spotify for that request.", false);
+				// That one didn't start: the next
 			}
 		}
+		Tell("Couldn't open Spotify for that request.", false);
 	}
 
 	// Played, or not wanted: it comes off the list, and whoever asked can ask for another
@@ -220,8 +220,13 @@ sealed class TrayApp : ApplicationContext
 		if(requests.Done(request)) RequestsChanged();
 	}
 
-	public void ClearRequests()
+	// After checking, so one stray click doesn't lose the whole list
+	public void ClearRequests(IWin32Window? owner = null)
 	{
+		var count = requests.Count;
+		if(count == 0) return;
+		var what = count == 1 ? "the 1 request" : "all " + count + " requests";
+		if(!RaccoonDialog.Ask(owner, "Clear all", "Clear " + what + "?", "They come off your list, and everyone who asked can ask for more.", "Clear all")) return;
 		// Live, the bot is told in one message. Otherwise it's told about each as soon as there's a stream again.
 		if(client.SendClear()) requests.ClearTold();
 		else requests.Clear();
@@ -256,8 +261,8 @@ sealed class TrayApp : ApplicationContext
 		if(all.Count == 0) items.Add(new ToolStripMenuItem("None yet. People ask on /radio.") { Enabled = false });
 		foreach(var request in all.Take(MenuRequests))
 		{
-			var item = new ToolStripMenuItem(InMenu(Short(request.Song, 45) + "   (" + Short(request.By, 20) + ")")) { ToolTipText = "Open in Spotify" };
-			item.Click += (_, _) => OpenInSpotify(request);
+			var item = new ToolStripMenuItem(InMenu(Short(request.Song, 45) + "   (" + Short(request.By, 20) + ")")) { ToolTipText = "Search for it in Spotify" };
+			item.Click += (_, _) => SearchSpotify(request);
 			items.Add(item);
 		}
 		if(all.Count > MenuRequests) items.Add(new ToolStripMenuItem("…and " + (all.Count - MenuRequests) + " more in the window") { Enabled = false });
